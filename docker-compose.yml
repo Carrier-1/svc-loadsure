@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    ports:
+      - "5672:5672"   # AMQP protocol port
+      - "15672:15672" # Management interface port
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - LOADSURE_API_KEY=your_api_key_here
+      - LOADSURE_BASE_URL=https://api.loadsure.com
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    command: npm run start
+
+  loadsure-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - LOADSURE_API_KEY=your_api_key_here
+      - LOADSURE_BASE_URL=https://api.loadsure.com
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    command: npm run service
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"  # Map to nginx port inside the Vue container
+    depends_on:
+      - api-service
+
+volumes:
+  rabbitmq_data:
