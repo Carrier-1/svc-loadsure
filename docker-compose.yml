@@ -31,7 +31,7 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-    command: npm run start
+    command: node src/index.js
 
   loadsure-service:
     build:
@@ -44,14 +44,14 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-    command: npm run service
+    command: node src/loadsureService.js
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "8080:80"  # Map to nginx port inside the Vue container
+      - "8080:80"
     depends_on:
       - api-service
 

@@ -5,10 +5,11 @@
     "description": "Microservice for handling cargo insurance quotes and bookings with Loadsure",
     "main": "src/index.js",
     "scripts": {
-      "start": "node src/index.js",
-      "dev": "nodemon src/index.js",
-      "test": "jest"
-    },
+  "start": "node src/index.js",
+  "dev": "nodemon src/index.js",
+  "service": "node src/loadsureService.js",
+  "test": "jest"
+},
     "dependencies": {
       "cors": "^2.8.5",
       "dotenv": "^16.3.1",

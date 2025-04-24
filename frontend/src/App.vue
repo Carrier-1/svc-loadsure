@@ -3,8 +3,8 @@
       <header>
         <div class="header-container">
           <div class="logo">
-            <img src="./assets/logo.png" alt="Company Logo">
-            <h1>FreightShip Pro</h1>
+            <img src="https://carrier1.com/#svg899472416_2078" alt="Company Logo">
+            <h1>Carrier1</h1>
           </div>
           <nav>
             <ul>
