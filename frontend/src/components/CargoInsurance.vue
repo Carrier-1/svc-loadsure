@@ -70,8 +70,8 @@
           <div class="form-group">
             <label for="weight-unit">Unit</label>
             <select id="weight-unit" v-model="freightDetails.weightUnit">
-              <option value="lb">Pounds</option>
-              <option value="kg">Kilograms</option>
+              <option value="lbs">Pounds</option>
+              <option value="kgs">Kilograms</option>
             </select>
           </div>
         </div>
@@ -399,7 +399,7 @@ export default {
         dimensionHeight: 48,
         dimensionUnit: 'in',
         weightValue: 500,
-        weightUnit: 'lb',
+        weightUnit: 'lbs',
         commodityId: null,
         loadTypeId: null,
         equipmentTypeId: null,
@@ -673,7 +673,7 @@ export default {
         dimensionHeight: 48,
         dimensionUnit: 'in',
         weightValue: 500,
-        weightUnit: 'lb',
+        weightUnit: 'lbs',
         commodityId: this.commodities.length > 0 ? this.commodities[0].id : null,
         loadTypeId: this.loadTypes.length > 0 ? this.loadTypes[0].id : null,
         equipmentTypeId: this.equipmentTypes.length > 0 ? this.equipmentTypes[0].id : null,

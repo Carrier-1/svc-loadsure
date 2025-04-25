@@ -129,7 +129,7 @@ class loadsureApiService {
     dimensionHeight = 48,
     dimensionUnit = 'in',
     weightValue = 500,
-    weightUnit = 'lb',
+    weightUnit = 'lbs',
     commodityId = null,
     loadTypeId = null,
     equipmentTypeId = null,
