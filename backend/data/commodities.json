@@ -1,0 +1,186 @@
+[
+  {
+    "id": 2,
+    "name": "Aircraft Parts"
+  },
+  {
+    "id": 28,
+    "name": "Antiques and Art"
+  },
+  {
+    "id": 30,
+    "name": "Beverages - Alcoholic, No Temp Control"
+  },
+  {
+    "id": 38,
+    "name": "Beverages - Alcoholic, Temp Controlled"
+  },
+  {
+    "id": 3,
+    "name": "Beverages - Non Alcoholic, No Temp Control"
+  },
+  {
+    "id": 39,
+    "name": "Beverages - Non Alcoholic, Temp Controlled"
+  },
+  {
+    "id": 4,
+    "name": "Building Materials"
+  },
+  {
+    "id": 5,
+    "name": "Chemicals"
+  },
+  {
+    "id": 6,
+    "name": "Clothing"
+  },
+  {
+    "id": 8,
+    "name": "Electronics/Appliances"
+  },
+  {
+    "id": 31,
+    "name": "Flowers"
+  },
+  {
+    "id": 32,
+    "name": "Foodstuff - Temp Controlled"
+  },
+  {
+    "id": 11,
+    "name": "Fuel and Petroleum Based Items"
+  },
+  {
+    "id": 46,
+    "name": "General Merchandise"
+  },
+  {
+    "id": 12,
+    "name": "Glass"
+  },
+  {
+    "id": 37,
+    "name": "High Risk"
+  },
+  {
+    "id": 33,
+    "name": "Jewelry and Precious Metals"
+  },
+  {
+    "id": 14,
+    "name": "Leather Products"
+  },
+  {
+    "id": 34,
+    "name": "Livestock"
+  },
+  {
+    "id": 15,
+    "name": "Machinery"
+  },
+  {
+    "id": 16,
+    "name": "Medical Equipment and Supplies"
+  },
+  {
+    "id": 17,
+    "name": "Metals"
+  },
+  {
+    "id": 18,
+    "name": "Minerals"
+  },
+  {
+    "id": 1,
+    "name": "Miscellaneous - No Temp Control"
+  },
+  {
+    "id": 40,
+    "name": "Miscellaneous - Temp Controlled"
+  },
+  {
+    "id": 13,
+    "name": "New Household Goods and Furniture"
+  },
+  {
+    "id": 9,
+    "name": "Non Perishable Food Products- No Temp Control"
+  },
+  {
+    "id": 21,
+    "name": "Nutraceuticals"
+  },
+  {
+    "id": 7,
+    "name": "Packaging Materials"
+  },
+  {
+    "id": 19,
+    "name": "Paper Products"
+  },
+  {
+    "id": 47,
+    "name": "Perishable Foodstuff - No Temp Control"
+  },
+  {
+    "id": 10,
+    "name": "Perishable Foodstuff - Temp Control"
+  },
+  {
+    "id": 20,
+    "name": "Personal Care"
+  },
+  {
+    "id": 45,
+    "name": "Pet Products"
+  },
+  {
+    "id": 43,
+    "name": "Pharmaceuticals - Over The Counter"
+  },
+  {
+    "id": 22,
+    "name": "Plastics and Rubbers"
+  },
+  {
+    "id": 23,
+    "name": "Sporting Equipment"
+  },
+  {
+    "id": 24,
+    "name": "Textiles"
+  },
+  {
+    "id": 36,
+    "name": "Tobacco Products"
+  },
+  {
+    "id": 48,
+    "name": "Used HHG & Personal Effects"
+  },
+  {
+    "id": 25,
+    "name": "Vehicle"
+  },
+  {
+    "id": 41,
+    "name": "Vehicle Parts"
+  },
+  {
+    "id": 26,
+    "name": "Vessel"
+  },
+  {
+    "id": 42,
+    "name": "Vessel Parts"
+  },
+  {
+    "id": 29,
+    "name": "Weapons (Non-Firearm), Parts and Accessories"
+  },
+  {
+    "id": 27,
+    "name": "Wood Materials"
+  }
+]

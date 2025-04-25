@@ -1,0 +1,42 @@
+[
+  {
+    "id": "FULL_TRUCKLOAD_1",
+    "name": "Full Truckload"
+  },
+  {
+    "id": "PARTIAL_2",
+    "name": "Partial"
+  },
+  {
+    "id": "LESS_THAN_TRUCK_3",
+    "name": "Less than Truckload"
+  },
+  {
+    "id": "VOLUME_4",
+    "name": "Volume"
+  },
+  {
+    "id": "FULL_CONTAINER_LOAD_5",
+    "name": "Full Container Load"
+  },
+  {
+    "id": "LESS_CONTAINER_LOAD_6",
+    "name": "Less Container Load"
+  },
+  {
+    "id": "PARCEL_PACKAGE_7",
+    "name": "Parcel Package"
+  },
+  {
+    "id": "BREAK_BULK_8",
+    "name": "Break Bulk"
+  },
+  {
+    "id": "ULD_9",
+    "name": "ULD"
+  },
+  {
+    "id": "PALLET_10",
+    "name": "Pallet"
+  }
+]

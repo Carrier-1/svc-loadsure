@@ -1,0 +1,15 @@
+[
+  "EXW - Ex Works, named place where shipment is available to the buyer, not loaded. The seller will not contract for any transportation.",
+  "FCA - Free Carrier, unloaded at the seller's dock OR a named place where shipment is available to the international carrier or agent, not loaded. This term can be used for any mode of transport.",
+  "FAS - Free Alongside Ship, named ocean port of shipment. Ocean shipments that are NOT containerized.",
+  "FOB - Free On Board vessel, named ocean port of shipment. This term is used for ocean shipments only where it is important that the goods pass the ship's rail.",
+  "CFR - Cost and Freight, Named ocean port of destination. This term is used for ocean shipments that are not containerized.",
+  "CIF - Cost, Insurance and Freight, named ocean port of destination. This term is used for ocean shipments that are not containerized.",
+  "CPT - Carriage Paid To, named place or port of destination. This term is used for air or ocean containerized and roll-on roll-off shipments.",
+  "CIP - Carriage and Insurance Paid To, named place or port of destination. This term is used for air or ocean containerized and roll-on roll-off shipments.",
+  "DAF - Delivered At Frontier, named place of destination, by land, not unloaded. This term is used for any mode of transportation but must be delivered by land.",
+  "DES - Delivered Ex-Ship, named port of destination, not unloaded. This term is used for ocean shipments only.",
+  "DEQ - Delivered Ex-Quay, named port of destination, unloaded, not cleared. This term is used for ocean shipments only.",
+  "DDU - Delivered Duty Unpaid, named place of destination, not unloaded, not cleared. This term is used for any mode of transportation.",
+  "DDP - Delivered Duty Paid, named place of destination, not unloaded, cleared. This term is used for any mode of transportation."
+]
