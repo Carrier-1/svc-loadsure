@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   rabbitmq:
@@ -26,12 +25,15 @@ services:
     environment:
       - PORT=3000
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-      - LOADSURE_API_KEY=your_api_key_here
-      - LOADSURE_BASE_URL=https://api.loadsure.com
+      - LOADSURE_API_KEY=your_api_key_hereMiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN
+      - LOADSURE_BASE_URL=https://portal.loadsure.net/api/
+      - SUPPORT_DATA_REFRESH_SCHEDULE=0 0 * * *
+    volumes:
+      - ./backend/data:/usr/src/app/data
     depends_on:
       rabbitmq:
         condition: service_healthy
-    command: node src/index.js
+    command: npm run start
 
   loadsure-service:
     build:
@@ -39,21 +41,24 @@ services:
       dockerfile: Dockerfile
     environment:
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-      - LOADSURE_API_KEY=your_api_key_here
-      - LOADSURE_BASE_URL=https://api.loadsure.com
+      - LOADSURE_API_KEY=your_MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN
+      - LOADSURE_BASE_URL=https://portal.loadsure.net/api/
+    volumes:
+      - ./backend/data:/usr/src/app/data
     depends_on:
       rabbitmq:
         condition: service_healthy
-    command: node src/loadsureService.js
+    command: npm run service
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "8080:80"
+      - "8080:80"  # Map to nginx port inside the Vue container
     depends_on:
       - api-service
 
 volumes:
   rabbitmq_data:
+  loadsure_data:

@@ -1,29 +1,31 @@
-
 {
-    "name": "loadsure-insurance-microservice",
-    "version": "1.0.0",
-    "description": "Microservice for handling cargo insurance quotes and bookings with Loadsure",
-    "main": "src/index.js",
-    "scripts": {
-  "start": "node src/index.js",
-  "dev": "nodemon src/index.js",
-  "service": "node src/loadsureService.js",
-  "test": "jest"
-},
-    "dependencies": {
-      "cors": "^2.8.5",
-      "dotenv": "^16.3.1",
-      "express": "^4.18.2",
-      "node-fetch": "^3.3.2",
-      "uuid": "^9.0.1"
-    },
-    "devDependencies": {
-      "jest": "^29.7.0",
-      "nodemon": "^3.0.1",
-      "supertest": "^6.3.3"
-    },
-    "type": "commonjs",
-    "engines": {
-      "node": ">=18.0.0"
-    }
+  "name": "loadsure-insurance-microservice",
+  "version": "1.0.0",
+  "description": "Microservice for handling cargo insurance quotes and bookings with Loadsure using RabbitMQ",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "service": "node src/loadsureService.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "node-cache": "^5.1.2",
+    "node-fetch": "^2.6.9",
+    "node-schedule": "^2.1.1",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1",
+    "supertest": "^6.3.3"
+  },
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
   }
+}
