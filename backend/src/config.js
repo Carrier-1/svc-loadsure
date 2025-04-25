@@ -5,7 +5,7 @@ require('dotenv').config();
 module.exports = {
   PORT: process.env.PORT || 3000,
   LOADSURE_API_KEY: process.env.LOADSURE_API_KEY || 'MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN',
-  LOADSURE_BASE_URL: process.env.LOADSURE_BASE_URL || 'https://portal.loadsure.net/api/',
+  LOADSURE_BASE_URL: process.env.LOADSURE_BASE_URL || 'https://portal.loadsure.net',
   REQUEST_TIMEOUT: 30000, // 30 seconds
   RABBITMQ_URL: process.env.RABBITMQ_URL || 'amqp://localhost',
   QUEUE_QUOTE_REQUESTED: 'quote-requested',

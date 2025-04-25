@@ -1,8 +1,30 @@
-// Loadsure Service for handling insurance quotes and bookings
-// This service connects to RabbitMQ for message handling and uses an in-memory store for quotes and bookings.
-const fetch = require('node-fetch');
+// File: src/services/loadsureApiService.js
 const { v4: uuidv4 } = require('uuid');
 const supportDataService = require('./supportDataService');
+
+// We'll initialize fetch using dynamic import
+let fetch;
+
+/**
+ * Initialize fetch with dynamic import
+ */
+async function initializeFetch() {
+  try {
+    // Dynamically import node-fetch
+    const module = await import('node-fetch');
+    fetch = module.default;
+    console.log('Fetch initialized successfully in LoadsureApiService');
+  } catch (error) {
+    console.error('Error initializing fetch in LoadsureApiService:', error);
+    // Fallback to require if dynamic import fails
+    try {
+      fetch = require('node-fetch');
+      console.log('Fetch initialized using require in LoadsureApiService');
+    } catch (e) {
+      console.error('Failed to initialize fetch using require in LoadsureApiService:', e);
+    }
+  }
+}
 
 /**
  * Loadsure API Service
@@ -12,6 +34,18 @@ class loadsureApiService {
   constructor(apiKey, baseUrl) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
+    
+    // Initialize fetch
+    this.initFetch();
+  }
+  
+  /**
+   * Initialize fetch asynchronously
+   */
+  async initFetch() {
+    if (!fetch) {
+      await initializeFetch();
+    }
   }
 
   /**
@@ -21,6 +55,14 @@ class loadsureApiService {
    */
   async getQuote(freightDetails) {
     console.log('Getting quote from Loadsure API');
+    
+    // Make sure fetch is initialized
+    if (!fetch) {
+      await initializeFetch();
+      if (!fetch) {
+        throw new Error('Fetch is not initialized in LoadsureApiService');
+      }
+    }
     
     try {
       // Prepare the request payload according to Loadsure API specs
@@ -160,6 +202,14 @@ class loadsureApiService {
    */
   async bookInsurance(quoteId) {
     console.log(`Booking insurance with Loadsure API for quote: ${quoteId}`);
+    
+    // Make sure fetch is initialized
+    if (!fetch) {
+      await initializeFetch();
+      if (!fetch) {
+        throw new Error('Fetch is not initialized in LoadsureApiService');
+      }
+    }
     
     try {
       const response = await fetch(`${this.baseUrl}/api/insureLoad/purchaseQuote`, {
@@ -369,6 +419,14 @@ class loadsureApiService {
   async getCertificateDetails(certificateNumber, userId) {
     console.log(`Getting certificate details for: ${certificateNumber}`);
     
+    // Make sure fetch is initialized
+    if (!fetch) {
+      await initializeFetch();
+      if (!fetch) {
+        throw new Error('Fetch is not initialized in LoadsureApiService');
+      }
+    }
+    
     try {
       const response = await fetch(`${this.baseUrl}/api/insureLoad/certificateSummary`, {
         method: 'POST',
@@ -422,4 +480,7 @@ class loadsureApiService {
   }
 }
 
-module.exports = LoadsureApiService;
+// Initialize fetch at module level
+initializeFetch();
+
+module.exports = loadsureApiService;

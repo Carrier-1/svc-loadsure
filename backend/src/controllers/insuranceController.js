@@ -264,7 +264,7 @@ router.post('/certificates', async (req, res) => {
       const loadsureApiService = require('../services/loadsureApiService');
       const loadsureApi = new LoadsureApiService(
         process.env.LOADSURE_API_KEY || 'MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN',
-        process.env.LOADSURE_BASE_URL || 'https://portal.loadsure.net/api/',
+        process.env.LOADSURE_BASE_URL || 'https://portal.loadsure.net',
       );
       
       // Get certificate details from Loadsure

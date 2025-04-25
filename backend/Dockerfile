@@ -8,6 +8,9 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 RUN npm install
 
+# Create data directory
+RUN mkdir -p /usr/src/app/data && chmod 777 /usr/src/app/data
+
 # Copy source code
 COPY . .
 

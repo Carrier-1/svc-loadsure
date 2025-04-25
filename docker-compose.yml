@@ -1,3 +1,4 @@
+version: '3.8'
 
 services:
   rabbitmq:
@@ -25,15 +26,16 @@ services:
     environment:
       - PORT=3000
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-      - LOADSURE_API_KEY=your_api_key_hereMiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN
-      - LOADSURE_BASE_URL=https://portal.loadsure.net/api/
+      - LOADSURE_API_KEY=MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN
+      - LOADSURE_BASE_URL=https://portal.loadsure.net
       - SUPPORT_DATA_REFRESH_SCHEDULE=0 0 * * *
+      - NODE_OPTIONS=--experimental-vm-modules
     volumes:
       - ./backend/data:/usr/src/app/data
     depends_on:
       rabbitmq:
         condition: service_healthy
-    command: npm run start
+    command: node src/index.js
 
   loadsure-service:
     build:
@@ -41,14 +43,16 @@ services:
       dockerfile: Dockerfile
     environment:
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-      - LOADSURE_API_KEY=your_MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN
-      - LOADSURE_BASE_URL=https://portal.loadsure.net/api/
+      - LOADSURE_API_KEY=MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN
+      - LOADSURE_BASE_URL=https://portal.loadsure.net
+      - NODE_OPTIONS=--experimental-vm-modules
     volumes:
       - ./backend/data:/usr/src/app/data
     depends_on:
       rabbitmq:
         condition: service_healthy
-    command: npm run service
+    # Updated path to the service file
+    command: node src/services/loadsureService.js
 
   frontend:
     build:
@@ -61,4 +65,3 @@ services:
 
 volumes:
   rabbitmq_data:
-  loadsure_data:

@@ -1,11 +1,13 @@
-// Loadsure Service for handling insurance quotes and bookings
-// This service connects to RabbitMQ for message handling and uses an in-memory store for quotes and bookings.
-const fetch = require('node-fetch');
+// File: src/services/supportDataService.js
+
 const { promisify } = require('util');
 const fs = require('fs');
 const path = require('path');
 const NodeCache = require('node-cache');
 const config = require('../config');
+
+// We'll initialize fetch using dynamic import
+let fetch;
 
 /**
  * Service for fetching, caching, and managing Loadsure support data
@@ -26,7 +28,12 @@ class SupportDataService {
     // Create data directory if it doesn't exist
     this.dataDir = options.dataDir || path.join(__dirname, '../../data');
     if (!fs.existsSync(this.dataDir)) {
-      fs.mkdirSync(this.dataDir, { recursive: true });
+      try {
+        fs.mkdirSync(this.dataDir, { recursive: true });
+        console.log(`Created data directory: ${this.dataDir}`);
+      } catch (error) {
+        console.error(`Failed to create data directory: ${error.message}`);
+      }
     }
     
     // Promisify file operations
@@ -53,6 +60,30 @@ class SupportDataService {
       termsOfSales: 'loadsure_terms_of_sales',
       lastUpdated: 'loadsure_support_data_last_updated'
     };
+    
+    // Initialize fetch
+    this.initializeFetch();
+  }
+
+  /**
+   * Initialize fetch with dynamic import
+   */
+  async initializeFetch() {
+    try {
+      // Dynamically import node-fetch
+      const module = await import('node-fetch');
+      fetch = module.default;
+      console.log('Fetch initialized successfully');
+    } catch (error) {
+      console.error('Error initializing fetch:', error);
+      // Fallback to require if dynamic import fails
+      try {
+        fetch = require('node-fetch');
+        console.log('Fetch initialized using require');
+      } catch (e) {
+        console.error('Failed to initialize fetch using require:', e);
+      }
+    }
   }
 
   /**
@@ -61,6 +92,14 @@ class SupportDataService {
    */
   async fetchAndUpdateAllSupportData() {
     console.log('Fetching all support data from Loadsure API...');
+    
+    // Make sure fetch is initialized
+    if (!fetch) {
+      await this.initializeFetch();
+      if (!fetch) {
+        throw new Error('Fetch is not initialized');
+      }
+    }
     
     try {
       const results = {};
@@ -96,7 +135,16 @@ class SupportDataService {
    * @returns {Promise<Array>} API response data
    */
   async fetchFromLoadsureAPI(endpoint) {
+    // Make sure fetch is initialized
+    if (!fetch) {
+      await this.initializeFetch();
+      if (!fetch) {
+        throw new Error('Fetch is not initialized');
+      }
+    }
+    
     try {
+      console.log(`Fetching from endpoint ${endpoint}...`);
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
         method: 'GET',
         headers: {
@@ -106,10 +154,12 @@ class SupportDataService {
       });
 
       if (!response.ok) {
-        throw new Error(`API error: ${response.status} ${response.statusText}`);
+        throw new Error(`API error: ${response.status} ${response.statusText} ${this.baseUrl}${endpoint}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      console.log(`Successfully fetched data from ${endpoint}`);
+      return data;
     } catch (error) {
       console.error(`Error fetching from endpoint ${endpoint}:`, error);
       throw error;
@@ -123,9 +173,14 @@ class SupportDataService {
    * @returns {Promise<void>}
    */
   async persistToFile(key, data) {
-    const filePath = path.join(this.dataDir, `${key}.json`);
-    await this.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
-    console.log(`Data persisted to ${filePath}`);
+    try {
+      const filePath = path.join(this.dataDir, `${key}.json`);
+      await this.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
+      console.log(`Data persisted to ${filePath}`);
+    } catch (error) {
+      console.error(`Error persisting ${key} to file:`, error);
+      // Don't throw error to continue processing other data
+    }
   }
 
   /**
@@ -150,6 +205,11 @@ class SupportDataService {
    */
   async initialize() {
     console.log('Initializing Support Data Service...');
+    
+    // Make sure fetch is initialized
+    if (!fetch) {
+      await this.initializeFetch();
+    }
     
     // Load all data types from files to cache
     for (const key of Object.keys(this.endpoints)) {
