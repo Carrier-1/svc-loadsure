@@ -1,6 +1,17 @@
 // backend/database/index.js
-const { Sequelize } = require('sequelize');
-const config = require('./config');
+import { Sequelize } from 'sequelize';
+import config from './config.js';
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+// Get __dirname equivalent in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Import model definitions
+import defineQuoteModel from './models/Quote.js';
+import defineBookingModel from './models/Booking.js';
+import defineCertificateModel from './models/Certificate.js';
 
 // Determine which environment to use
 const env = process.env.NODE_ENV || 'development';
@@ -33,9 +44,9 @@ async function testConnection() {
 
 // Define models
 const models = {
-  Quote: require('./models/Quote')(sequelize),
-  Booking: require('./models/Booking')(sequelize),
-  Certificate: require('./models/Certificate')(sequelize),
+  Quote: defineQuoteModel(sequelize),
+  Booking: defineBookingModel(sequelize),
+  Certificate: defineCertificateModel(sequelize),
 };
 
 // Set up model associations
@@ -46,7 +57,7 @@ Object.keys(models).forEach(modelName => {
 });
 
 // Export the db object
-module.exports = {
+export {
   sequelize,
   Sequelize,
   models,

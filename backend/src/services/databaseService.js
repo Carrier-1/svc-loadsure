@@ -1,7 +1,8 @@
 // backend/src/services/databaseService.js
-const { sequelize, models } = require('../../database');
+import { Op } from 'sequelize';
+import { sequelize, models } from '../../database/index.js';
+
 const { Quote, Booking, Certificate } = models;
-const { Op } = require('sequelize');
 
 /**
  * Service for database operations related to insurance
@@ -323,4 +324,4 @@ class DatabaseService {
   }
 }
 
-module.exports = DatabaseService;
+export default DatabaseService;

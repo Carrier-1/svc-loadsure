@@ -1,6 +1,6 @@
 // File: src/services/loadsureApiService.js
-const { v4: uuidv4 } = require('uuid');
-const supportDataService = require('./supportDataService');
+import { v4 as uuidv4 } from 'uuid';
+import supportDataService from './supportDataService.js';
 
 // We'll initialize fetch using dynamic import
 let fetch;
@@ -16,12 +16,13 @@ async function initializeFetch() {
     console.log('Fetch initialized successfully in LoadsureApiService');
   } catch (error) {
     console.error('Error initializing fetch in LoadsureApiService:', error);
-    // Fallback to require if dynamic import fails
+    // Fallback to try again with another approach
     try {
-      fetch = require('node-fetch');
-      console.log('Fetch initialized using require in LoadsureApiService');
+      const module = await import('node-fetch');
+      fetch = module.default;
+      console.log('Fetch initialized using fallback in LoadsureApiService');
     } catch (e) {
-      console.error('Failed to initialize fetch using require in LoadsureApiService:', e);
+      console.error('Failed to initialize fetch using fallback in LoadsureApiService:', e);
     }
   }
 }
@@ -689,4 +690,4 @@ class LoadsureApiService {
 // Initialize fetch at module level
 initializeFetch();
 
-module.exports = LoadsureApiService;
+export default LoadsureApiService;

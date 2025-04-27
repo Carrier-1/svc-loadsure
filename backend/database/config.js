@@ -1,7 +1,7 @@
 // backend/database/config.js
-require('dotenv').config();
+import 'dotenv/config';
 
-module.exports = {
+export default {
   development: {
     dialect: process.env.DB_DIALECT || 'postgres',
     host: process.env.DB_HOST || 'postgres',

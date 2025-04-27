@@ -1,7 +1,7 @@
 // Loadsure Service for handling insurance quotes and bookings
 // This service connects to RabbitMQ for message handling and uses an in-memory store for quotes and bookings.
-const schedule = require('node-schedule');
-const supportDataService = require('./supportDataService');
+import schedule from 'node-schedule';
+import supportDataService from './supportDataService.js';
 
 /**
  * Service for scheduling periodic updates of Loadsure support data
@@ -109,4 +109,4 @@ const supportDataRefreshService = new SupportDataRefreshService({
   schedule: process.env.SUPPORT_DATA_REFRESH_SCHEDULE || '0 0 * * *' // Default: daily at midnight
 });
 
-module.exports = supportDataRefreshService;
+export default supportDataRefreshService;

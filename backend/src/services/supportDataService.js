@@ -1,10 +1,15 @@
 // File: src/services/supportDataService.js
 
-const { promisify } = require('util');
-const fs = require('fs');
-const path = require('path');
-const NodeCache = require('node-cache');
-const config = require('../config');
+import { promisify } from 'util';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import NodeCache from 'node-cache';
+import config from '../config.js';
+
+// Get __dirname equivalent in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // We'll initialize fetch using dynamic import
 let fetch;
@@ -26,7 +31,7 @@ class SupportDataService {
     });
     
     // Create data directory if it doesn't exist
-    this.dataDir = options.dataDir || path.join(__dirname, '../../data');
+    this.dataDir = options.dataDir || path.join(__dirname, '../../../data');
     if (!fs.existsSync(this.dataDir)) {
       try {
         fs.mkdirSync(this.dataDir, { recursive: true });
@@ -76,12 +81,13 @@ class SupportDataService {
       console.log('Fetch initialized successfully');
     } catch (error) {
       console.error('Error initializing fetch:', error);
-      // Fallback to require if dynamic import fails
+      // Fallback to try again
       try {
-        fetch = require('node-fetch');
-        console.log('Fetch initialized using require');
+        const fetchModule = await import('node-fetch');
+        fetch = fetchModule.default;
+        console.log('Fetch initialized using fallback method');
       } catch (e) {
-        console.error('Failed to initialize fetch using require:', e);
+        console.error('Failed to initialize fetch using fallback:', e);
       }
     }
   }
@@ -376,8 +382,8 @@ const supportDataService = new SupportDataService(
   config.LOADSURE_BASE_URL,
   {
     cacheTTL: 3600, // 1 hour cache TTL
-    dataDir: path.join(__dirname, '../../data')
+    dataDir: path.join(__dirname, '../../../data')
   }
 );
 
-module.exports = supportDataService;
+export default supportDataService;

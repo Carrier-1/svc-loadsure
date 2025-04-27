@@ -1,9 +1,10 @@
 // Loadsure Service for handling insurance quotes and bookings
 // This service connects to RabbitMQ for message handling and uses an in-memory store for quotes and bookings.
-const express = require('express');
+import express from 'express';
+import supportDataService from '../services/supportDataService.js';
+import supportDataRefreshService from '../services/supportDataRefreshService.js';
+
 const router = express.Router();
-const supportDataService = require('../services/supportDataService');
-const supportDataRefreshService = require('../services/supportDataRefreshService');
 
 /**
  * @route GET /api/support-data/commodities
@@ -190,4 +191,4 @@ router.post('/schedule', (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

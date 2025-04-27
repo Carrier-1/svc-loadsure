@@ -1,8 +1,9 @@
 // backend/src/controllers/insuranceController.js
-const express = require('express');
-const { v4: uuidv4 } = require('uuid');
+import express from 'express';
+import { v4 as uuidv4 } from 'uuid';
+import DatabaseService from '../services/databaseService.js';
+
 const router = express.Router();
-const DatabaseService = require('../services/databaseService');
 
 // In-memory storage for pending responses (still needed for async handling)
 let pendingRequests;
@@ -349,8 +350,8 @@ router.post('/certificates', async (req, res) => {
     }
     
     // Create a temporary LoadsureApiService instance for this request
-    const LoadsureApiService = require('../services/loadsureApiService');
-    const loadsureApi = new LoadsureApiService(
+    const LoadsureApiService = await import('../services/loadsureApiService.js');
+    const loadsureApi = new LoadsureApiService.default(
       process.env.LOADSURE_API_KEY || 'MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN',
       process.env.LOADSURE_BASE_URL || 'https://portal.loadsure.net',
     );
@@ -510,4 +511,4 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-module.exports = { router, initialize };
+export { router, initialize };

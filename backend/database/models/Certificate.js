@@ -1,7 +1,7 @@
 // backend/database/models/Certificate.js
-const { DataTypes } = require('sequelize');
+import { DataTypes } from 'sequelize';
 
-module.exports = (sequelize) => {
+export default (sequelize) => {
   const Certificate = sequelize.define('Certificate', {
     id: {
       type: DataTypes.UUID,

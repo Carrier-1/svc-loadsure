@@ -1,18 +1,18 @@
 // Loadsure Service for handling insurance quotes and bookings
 // This service connects to RabbitMQ for message handling and uses an in-memory store for quotes and bookings.
-const express = require('express');
-const cors = require('cors');
-const { v4: uuidv4 } = require('uuid');
-const amqp = require('amqplib');
-const config = require('./config');
+import express from 'express';
+import cors from 'cors';
+import { v4 as uuidv4 } from 'uuid';
+import * as amqp from 'amqplib';
+import config from './config.js';
 
 // Import services
-const supportDataService = require('./services/supportDataService');
-const supportDataRefreshService = require('./services/supportDataRefreshService');
+import supportDataService from './services/supportDataService.js';
+import supportDataRefreshService from './services/supportDataRefreshService.js';
 
 // Import controllers
-const supportDataController = require('./controllers/supportDataController');
-const insuranceController = require('./controllers/insuranceController');
+import supportDataController from './controllers/supportDataController.js';
+import * as insuranceController from './controllers/insuranceController.js';
 
 // Create Express app
 const app = express();
@@ -228,4 +228,4 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Export for testing
-module.exports = { app };
+export { app };

@@ -1,7 +1,7 @@
 // backend/database/models/Quote.js
-const { DataTypes } = require('sequelize');
+import { DataTypes } from 'sequelize';
 
-module.exports = (sequelize) => {
+export default (sequelize) => {
   const Quote = sequelize.define('Quote', {
     id: {
       type: DataTypes.UUID,

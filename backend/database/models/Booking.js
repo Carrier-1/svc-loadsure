@@ -1,7 +1,7 @@
 // backend/database/models/Booking.js
-const { DataTypes } = require('sequelize');
+import { DataTypes } from 'sequelize';
 
-module.exports = (sequelize) => {
+export default (sequelize) => {
   const Booking = sequelize.define('Booking', {
     id: {
       type: DataTypes.UUID,

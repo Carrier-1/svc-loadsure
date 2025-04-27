@@ -1,9 +1,9 @@
 // backend/src/services/loadsureService.js
-const amqp = require('amqplib');
-const { v4: uuidv4 } = require('uuid');
-const config = require('../config');
-const LoadsureApiService = require('./loadsureApiService');
-const DatabaseService = require('./databaseService');
+import * as amqp from 'amqplib';
+import { v4 as uuidv4 } from 'uuid';
+import config from '../config.js';
+import LoadsureApiService from './loadsureApiService.js';
+import DatabaseService from './databaseService.js';
 
 /**
  * Main service for handling Loadsure integration through message queues
@@ -202,8 +202,8 @@ function startScheduledTasks() {
 }
 
 // Start the service
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   startService().catch(console.error);
 }
 
-module.exports = { startService };
+export { startService };
