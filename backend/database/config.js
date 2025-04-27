@@ -3,8 +3,12 @@ require('dotenv').config();
 
 module.exports = {
   development: {
-    dialect: 'sqlite',
-    storage: './data/database.sqlite',
+    dialect: process.env.DB_DIALECT || 'postgres',
+    host: process.env.DB_HOST || 'postgres',
+    port: process.env.DB_PORT || 5432,
+    username: process.env.DB_USERNAME || 'loadsure',
+    password: process.env.DB_PASSWORD || 'loadsurepass',
+    database: process.env.DB_NAME || 'loadsure_dev',
     logging: console.log,
   },
   test: {

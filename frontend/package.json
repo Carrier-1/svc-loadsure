@@ -2,12 +2,13 @@
   "name": "loadsure-insurance-frontend",
   "version": "1.0.0",
   "private": true,
-  "scripts": {
-    "serve": "vue-cli-service serve",
-    "build": "vue-cli-service build",
-    "lint": "vue-cli-service lint",
-    "postinstall": "npm run lint -- --fix"
-  },
+"scripts": {
+  "serve": "vue-cli-service serve",
+  "build": "vue-cli-service build",
+  "lint": "vue-cli-service lint",
+  "lint:fix": "vue-cli-service lint --fix",
+  "clean": "rm -rf node_modules"
+},
   "dependencies": {
     "axios": "^1.6.2",
     "core-js": "^3.35.0",
@@ -16,7 +17,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.23.5",
-    "@babel/eslint-parser": "^7.27.0",
+    "@babel/eslint-parser": "^7.23.5",
     "@vue/cli-plugin-babel": "~5.0.8",
     "@vue/cli-plugin-eslint": "~5.0.8",
     "@vue/cli-service": "~5.0.8",
@@ -35,7 +36,7 @@
     "parserOptions": {
       "parser": "@babel/eslint-parser",
       "requireConfigFile": false,
-      "ecmaVersion": 2020,
+      "ecmaVersion": 2022,
       "sourceType": "module"
     },
     "rules": {

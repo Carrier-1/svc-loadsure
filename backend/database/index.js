@@ -1,35 +1,25 @@
 // backend/database/index.js
 const { Sequelize } = require('sequelize');
 const config = require('./config');
-const path = require('path');
 
 // Determine which environment to use
 const env = process.env.NODE_ENV || 'development';
 const dbConfig = config[env];
 
 // Create Sequelize instance
-let sequelize;
-if (dbConfig.dialect === 'sqlite') {
-  sequelize = new Sequelize({
+const sequelize = new Sequelize(
+  dbConfig.database,
+  dbConfig.username,
+  dbConfig.password,
+  {
+    host: dbConfig.host,
+    port: dbConfig.port,
     dialect: dbConfig.dialect,
-    storage: path.resolve(__dirname, '..', dbConfig.storage),
-    logging: dbConfig.logging
-  });
-} else {
-  sequelize = new Sequelize(
-    dbConfig.database,
-    dbConfig.username,
-    dbConfig.password,
-    {
-      host: dbConfig.host,
-      port: dbConfig.port,
-      dialect: dbConfig.dialect,
-      logging: dbConfig.logging,
-      dialectOptions: dbConfig.dialectOptions,
-      pool: dbConfig.pool
-    }
-  );
-}
+    logging: dbConfig.logging,
+    dialectOptions: dbConfig.dialectOptions,
+    pool: dbConfig.pool
+  }
+);
 
 // Test database connection
 async function testConnection() {

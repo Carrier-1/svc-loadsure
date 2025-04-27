@@ -1,13 +1,14 @@
 # Frontend Dockerfile
-# File: frontend/Dockerfile
 # Build stage
 FROM node:18-alpine as build-stage
 
 WORKDIR /app
 
-# Install dependencies
+# Copy package files first
 COPY package*.json ./
-RUN npm install
+
+# Use npm ci instead of npm install
+RUN npm ci
 
 # Copy source files
 COPY . .
