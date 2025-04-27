@@ -1,17 +1,18 @@
 // File: src/main.js
-import Vue from 'vue'
+import { createApp } from 'vue'
 import App from './App.vue'
 import store from './store/supportDataStore'
 import './assets/main.css'
 
-// Global error handler
-Vue.config.errorHandler = (err, vm, info) => {
+// Create the Vue application
+const app = createApp(App)
+
+// Add global error handler
+app.config.errorHandler = (err, vm, info) => {
   console.error('Vue Error:', err);
   console.error('Info:', info);
 };
 
-// Create the Vue instance with store
-new Vue({
-  store, // Add Vuex store
-  render: h => h(App),
-}).$mount('#app')
+// Use the store and mount
+app.use(store)
+app.mount('#app')

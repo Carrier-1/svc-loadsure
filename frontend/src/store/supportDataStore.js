@@ -1,15 +1,12 @@
 // Loadsure Service for handling insurance quotes and bookings
 // This service connects to RabbitMQ for message handling and uses an in-memory store for quotes and bookings.
-import Vue from 'vue';
-import Vuex from 'vuex';
-
-Vue.use(Vuex);
+import { createStore } from 'vuex';
 
 // Support data store module
 const supportDataModule = {
   namespaced: true,
   
-  state: {
+  state: () => ({
     commodities: [],
     commodityExclusions: [],
     equipmentTypes: [],
@@ -20,7 +17,7 @@ const supportDataModule = {
     loading: false,
     error: null,
     lastUpdated: null
-  },
+  }),
   
   getters: {
     getCommodities: state => state.commodities,
@@ -217,7 +214,7 @@ const supportDataModule = {
 };
 
 // Create and export the store
-export default new Vuex.Store({
+export default createStore({
   modules: {
     supportData: supportDataModule
   }

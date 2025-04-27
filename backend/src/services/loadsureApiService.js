@@ -297,20 +297,26 @@ class loadsureApiService {
     const defaultUser = {
       id: "internal-" + uuidv4().substring(0, 8),
       email: "user@example.com",
-      name: "User"
+      name: "User",
+      phone: "123-456-7890"
     };
     
     // Default assured information
     const defaultAssured = {
+      id: "internal-" + uuidv4().substring(0, 8),
       name: "Assured Company",
       email: "assured@example.com",
+      phone: "123-456-7890",
       address: {
         address1: "123 Business St",
+        address2: "Suite 100",
         city: originParts[0] || "Unknown",
         state: originParts[1] || "Unknown",
         country: "USA",
         postal: "12345"
-      }
+      },
+      ein: "123456789",
+      type: "RECIPIENT"
     };
     
     // Use provided user/assured info or defaults
@@ -340,9 +346,44 @@ class loadsureApiService {
       shipment: {
         version: "2",
         freightId: `FR-${Date.now().toString().substring(7)}`,
+        poNumber: "PO-123456",
         pickupDate: formattedPickupDate,
         deliveryDate: formattedDeliveryDate,
-        
+        shipper: {
+          id: "internal-" + uuidv4().substring(0, 8),
+          name: "Shipper Company",
+          email: "shipper@example.com",
+          phone: "123-456-7890",
+          address: {
+            address1: "123 Shipper St",
+            address2: "Suite 100",
+            city: originParts[0] || "Unknown",
+            state: originParts[1] || "Unknown",
+            country: "USA",
+            postal: "12345"
+          },
+          ein: "987654321",
+          foundedInYear: 2000,
+          businessType: "CORPORATION",
+          descriptionOfOperations: "Shipper operations description",
+          annualShipments: 1000,
+          cargoClaimsLast3Years: 0
+        },
+        recipient: {
+          id: "internal-" + uuidv4().substring(0, 8),
+          name: "Recipient Company",
+          email: "recipient@example.com",
+          phone: "123-456-7890",
+          address: {
+            address1: "456 Recipient St",
+            address2: "Suite 200",
+            city: destinationParts[0] || "Unknown",
+            state: destinationParts[1] || "Unknown",
+            country: "USA",
+            postal: "54321"
+          },
+          ein: "123456789"
+        },
         // Cargo details
         cargo: {
           cargoValue: {
@@ -355,7 +396,22 @@ class loadsureApiService {
             unit: weight.unit,
             value: weight.value
           },
-          freightClass: formattedFreightClass
+          freightClass: formattedFreightClass,
+          nmfcNumber: freightClass,
+          usedGoods: false,
+          containerization: "FULL_CONTAINER",
+          packaging: "PALLETIZED",
+          truckload: "FULL",
+          temperatureRange: {
+            unit:"F",
+            minimum: 0,
+            maximum: 100
+          },
+          storedpast30days: false,
+          termsofSale: "FOB",
+          notes: "Additional notes about the cargo",
+          marksAndNumbers: "Marks and numbers on the cargo",
+          fullDescriptionOfCargo: description
         },
         
         // Carriers - using road by default
@@ -368,6 +424,16 @@ class loadsureApiService {
             type: "USDOT",
             value: carrier?.dotNumber || "123456"
           },
+          address: {
+            address1: "789 Carrier St",
+            address2: "Suite 300",
+            city: originParts[0] || "Unknown",
+            state: originParts[1] || "Unknown",
+            country: "USA",
+            postal: "12345"
+          },
+          leg: 1,
+          legStopIds: ["1", "2"],
           equipmentType: equipmentType
         }],
         
@@ -379,8 +445,10 @@ class loadsureApiService {
             date: formattedPickupDate,
             address: {
               address1: "Pickup Address",
+              address2: "Suite 100",
               city: originParts[0] || "Unknown",
               state: originParts[1] || "Unknown",
+              postal: "12345",
               country: "USA"
             }
           },
@@ -390,8 +458,10 @@ class loadsureApiService {
             date: formattedDeliveryDate,
             address: {
               address1: "Delivery Address",
+              address2: "Suite 200",
               city: destinationParts[0] || "Unknown",
               state: destinationParts[1] || "Unknown",
+              postal: "54321",
               country: "USA"
             }
           }
