@@ -145,7 +145,7 @@ async function setupConsumers() {
           return;
         }
         
-        console.log(`Booking confirmed for request ${requestId}, booking ID: ${data.bookingId}`);
+        console.log(`Booking confirmed for request ${requestId}, booking ID: ${data.bookingId}, quote ID: ${data.quoteId}, certificate URL: ${data.certificateUrl}, policy number: ${data.policyNumber}`);
         
         // Store booking
         bookings.set(data.bookingId, data);
