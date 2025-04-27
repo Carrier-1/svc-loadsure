@@ -3,7 +3,8 @@
 const amqp = require('amqplib');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config');
-const LoadsureApiService = require('./LoadsureApiService');
+// Fix import statement - use lowercase to match the actual filename
+const LoadsureApiService = require('./loadsureApiService');  // Changed from './LoadsureApiService'
 
 /**
  * Main service for handling Loadsure integration through message queues
