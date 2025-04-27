@@ -72,6 +72,7 @@ class LoadsureApiService {
    */
   resolveDefaultEquipmentType() {
     const equipmentTypes = supportDataService.getEquipmentTypes();
+    // Default to dry van (equipment type 2) if not found in the support data
     return equipmentTypes.find(et => et.name.toLowerCase().includes('dry van'))?.id || 2;
   }
 
@@ -93,9 +94,21 @@ class LoadsureApiService {
     
     try {
       // Check if this is a complete payload or needs transformation
-      const payload = freightDetails.shipment ? 
+      let payload = freightDetails.shipment ? 
         freightDetails : // If it already has a shipment property, it's in the correct format
         this.buildQuoteRequestPayload(freightDetails);
+      
+      // Ensure equipment type is set for all carriers
+      if (payload.shipment && payload.shipment.carriers && Array.isArray(payload.shipment.carriers)) {
+        payload.shipment.carriers.forEach(carrier => {
+          if (!carrier.equipmentType) {
+            carrier.equipmentType = this.resolveDefaultEquipmentType();
+          }
+        });
+      }
+      
+      // Log the payload for debugging
+      console.log('Sending payload to Loadsure API:', JSON.stringify(payload, null, 2));
       
       const response = await fetch(`${this.baseUrl}/api/insureLoad/quote`, {
         method: 'POST',
@@ -191,6 +204,9 @@ class LoadsureApiService {
     const formattedPickupDate = pickupDate || today.toISOString().split('T')[0];
     const formattedDeliveryDate = deliveryDate || nextWeek.toISOString().split('T')[0];
     
+    // Get default equipment type ID
+    const defaultEquipmentTypeId = this.resolveDefaultEquipmentType();
+    
     // Process freight classes
     let resolvedFreightClasses = [];
     if (freightClasses && Array.isArray(freightClasses) && freightClasses.length > 0) {
@@ -218,10 +234,16 @@ class LoadsureApiService {
       resolvedCommodities = [this.resolveCommodityIdFromFreightClass(freightClass)];
     }
     
-    // Process carriers
+    // Process carriers - Ensure equipmentType is always set
     let resolvedCarriers = [];
     if (carriers && Array.isArray(carriers) && carriers.length > 0) {
-      resolvedCarriers = carriers;
+      resolvedCarriers = carriers.map(carrier => {
+        // Ensure each carrier has an equipmentType
+        return {
+          ...carrier,
+          equipmentType: carrier.equipmentType || equipmentTypeId || defaultEquipmentTypeId
+        };
+      });
     } else {
       // Create default carrier from primitive fields
       resolvedCarriers = [{
@@ -233,7 +255,7 @@ class LoadsureApiService {
           type: "USDOT",
           value: carrierDotNumber || "123456"
         },
-        equipmentType: equipmentTypeId || this.resolveDefaultEquipmentType()
+        equipmentType: equipmentTypeId || defaultEquipmentTypeId // Use resolved equipment type
       }];
     }
     
@@ -291,6 +313,9 @@ class LoadsureApiService {
       }
     };
     
+    // Resolve default load type
+    const defaultLoadType = this.resolveDefaultLoadType();
+    
     // Construct the full API payload
     const payload = {
       user,
@@ -316,8 +341,8 @@ class LoadsureApiService {
         },
         carriers: resolvedCarriers,
         stops: resolvedStops,
-        loadType: loadTypeId || this.resolveDefaultLoadType(),
-        equipmentType: equipmentTypeId || this.resolveDefaultEquipmentType()
+        loadType: loadTypeId || defaultLoadType,
+        equipmentType: equipmentTypeId || defaultEquipmentTypeId
       }
     };
     
@@ -402,6 +427,9 @@ class LoadsureApiService {
       stops = null
     } = freightDetails;
 
+    // Default equipment type ID
+    const defaultEquipmentTypeId = this.resolveDefaultEquipmentType();
+    
     // Process freight classes
     let resolvedFreightClasses = [];
     if (freightClasses && Array.isArray(freightClasses) && freightClasses.length > 0) {
@@ -430,12 +458,7 @@ class LoadsureApiService {
     }
     
     // Get equipment types from support data service
-    const equipmentTypes = supportDataService.getEquipmentTypes();
-    
-    // Default to dry van (equipment type 2) if no mapping is available
-    const equipmentType = freightDetails.equipmentTypeId || 
-                         equipmentTypes.find(et => et.name.toLowerCase().includes('dry van'))?.id || 
-                         2;
+    const equipmentType = freightDetails.equipmentTypeId || defaultEquipmentTypeId;
 
     // Parse origin and destination if they're provided as strings
     let originParts = ['Unknown', 'Unknown'];
@@ -457,10 +480,15 @@ class LoadsureApiService {
     const formattedPickupDate = pickupDate || today.toISOString().split('T')[0];
     const formattedDeliveryDate = deliveryDate || nextWeek.toISOString().split('T')[0];
     
-    // Process carriers
+    // Process carriers - Ensure equipmentType is set for each carrier
     let resolvedCarriers = [];
     if (carriers && Array.isArray(carriers) && carriers.length > 0) {
-      resolvedCarriers = carriers;
+      resolvedCarriers = carriers.map(carrier => {
+        return {
+          ...carrier,
+          equipmentType: carrier.equipmentType || equipmentType || defaultEquipmentTypeId
+        };
+      });
     } else if (carrier) {
       // Legacy single carrier support
       resolvedCarriers = [{
@@ -472,7 +500,7 @@ class LoadsureApiService {
           type: "USDOT",
           value: carrier.dotNumber || "123456"
         },
-        equipmentType: equipmentType
+        equipmentType: equipmentType // Use the equipmentType from above
       }];
     } else {
       // Default carrier
@@ -485,7 +513,7 @@ class LoadsureApiService {
           type: "USDOT",
           value: "123456"
         },
-        equipmentType: equipmentType
+        equipmentType: equipmentType // Use the equipmentType from above
       }];
     }
     
@@ -546,6 +574,9 @@ class LoadsureApiService {
     // Use provided user/assured info or defaults
     const userData = user || defaultUser;
     const assuredData = assured || defaultAssured;
+    
+    // Resolve default load type
+    const defaultLoadType = this.resolveDefaultLoadType();
 
     // Construct the payload according to Loadsure API structure
     return {
@@ -596,7 +627,7 @@ class LoadsureApiService {
         stops: resolvedStops,
         
         // Additional fields
-        loadType: freightDetails.loadTypeId || this.resolveDefaultLoadType(),
+        loadType: freightDetails.loadTypeId || defaultLoadType,
         equipmentType: equipmentType
       }
     };
