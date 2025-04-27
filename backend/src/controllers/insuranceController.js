@@ -1,13 +1,12 @@
-// Loadsure Service for handling insurance quotes and bookings
-// This service connects to RabbitMQ for message handling and uses an in-memory store for quotes and bookings.
+// backend/src/controllers/insuranceController.js
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
+const DatabaseService = require('../services/databaseService');
 
-// In-memory storage references - these would be passed from main app
+// In-memory storage for pending responses (still needed for async handling)
 let pendingRequests;
-let quotes;
-let bookings;
+// RabbitMQ channel
 let channel;
 
 /**
@@ -16,8 +15,6 @@ let channel;
  */
 function initialize(dependencies) {
   pendingRequests = dependencies.pendingRequests;
-  quotes = dependencies.quotes;
-  bookings = dependencies.bookings;
   channel = dependencies.channel;
 }
 
@@ -244,7 +241,7 @@ router.post('/quotes/simple', (req, res) => {
  * @desc Book insurance
  * @access Public
  */
-router.post('/bookings', (req, res) => {
+router.post('/bookings', async (req, res) => {
   const { quoteId } = req.body;
   const requestId = uuidv4();
   
@@ -256,10 +253,27 @@ router.post('/bookings', (req, res) => {
     });
   }
   
-  // Make sure quote exists in our system
-  if (!quotes.has(quoteId)) {
+  // Check if quote exists in the database
+  try {
+    const quote = await DatabaseService.getQuote(quoteId);
+    if (quote.status === 'expired') {
+      return res.status(400).json({
+        error: 'Quote has expired',
+        requestId,
+        quoteId
+      });
+    }
+    if (quote.status === 'booked') {
+      return res.status(400).json({
+        error: 'Quote has already been booked',
+        requestId,
+        quoteId
+      });
+    }
+  } catch (error) {
     return res.status(404).json({
       error: 'Quote not found',
+      requestId,
       quoteId
     });
   }
@@ -295,55 +309,205 @@ router.post('/bookings', (req, res) => {
   }, 30000); // 30 seconds timeout
 });
 
-
 /**
  * @route POST /api/insurance/certificates
  * @desc Get certificate details
  * @access Public
  */
 router.post('/certificates', async (req, res) => {
-    const { certificateNumber, userId } = req.body;
-    
-    // Basic validation
-    if (!certificateNumber || !userId) {
-      return res.status(400).json({
-        error: 'Missing required fields: certificateNumber, userId',
-        status: 'error'
-      });
-    }
-    
+  const { certificateNumber, userId } = req.body;
+  
+  // Basic validation
+  if (!certificateNumber || !userId) {
+    return res.status(400).json({
+      error: 'Missing required fields: certificateNumber, userId',
+      status: 'error'
+    });
+  }
+  
+  try {
+    // Check if certificate exists in database
     try {
-      // Create a temporary LoadsureApiService instance for this request
-      const LoadsureApiService = require('../services/LoadsureApiService');
-      const loadsureApi = new LoadsureApiService(
-        process.env.LOADSURE_API_KEY || 'MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN',
-        process.env.LOADSURE_BASE_URL || 'https://portal.loadsure.net',
-      );
+      const certificate = await DatabaseService.getCertificate(certificateNumber);
       
-      // Get certificate details from Loadsure
-      const certificateDetails = await loadsureApi.getCertificateDetails(certificateNumber, userId);
-      
-      // Format response
-      res.json({
+      // Return certificate from database
+      return res.json({
         status: 'success',
         certificate: {
-          certificateNumber: certificateDetails.certificateNumber,
-          productName: certificateDetails.productName,
-          productId: certificateDetails.productId,
-          status: certificateDetails.status,
-          coverageAmount: certificateDetails.limit,
-          premium: certificateDetails.premium,
-          certificateLink: certificateDetails.certificateLink
+          certificateNumber: certificate.certificateNumber,
+          productName: certificate.productName,
+          productId: certificate.productId,
+          status: certificate.status,
+          coverageAmount: certificate.coverageAmount,
+          premium: certificate.premium,
+          certificateLink: certificate.certificateLink
         }
       });
-    } catch (error) {
-      console.error('Error fetching certificate details:', error);
-      res.status(500).json({
-        error: 'Failed to retrieve certificate details',
-        message: error.message,
-        status: 'error'
-      });
+    } catch (dbError) {
+      console.log('Certificate not found in database, fetching from API');
+      // Fall through to API call if not in database
     }
-  });
+    
+    // Create a temporary LoadsureApiService instance for this request
+    const LoadsureApiService = require('../services/loadsureApiService');
+    const loadsureApi = new LoadsureApiService(
+      process.env.LOADSURE_API_KEY || 'MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN',
+      process.env.LOADSURE_BASE_URL || 'https://portal.loadsure.net',
+    );
+    
+    // Get certificate details from Loadsure
+    const certificateDetails = await loadsureApi.getCertificateDetails(certificateNumber, userId);
+    
+    // Save certificate to database
+    await DatabaseService.saveCertificate(certificateDetails, { 
+      certificateNumber, 
+      userId 
+    });
+    
+    // Format response
+    res.json({
+      status: 'success',
+      certificate: {
+        certificateNumber: certificateDetails.certificateNumber,
+        productName: certificateDetails.productName,
+        productId: certificateDetails.productId,
+        status: certificateDetails.status,
+        coverageAmount: certificateDetails.limit,
+        premium: certificateDetails.premium,
+        certificateLink: certificateDetails.certificateLink
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching certificate details:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve certificate details',
+      message: error.message,
+      status: 'error'
+    });
+  }
+});
+
+/**
+ * @route GET /api/insurance/quotes/:id
+ * @desc Get quote details by ID
+ * @access Public
+ */
+router.get('/quotes/:id', async (req, res) => {
+  try {
+    // Only use database lookup for GET requests
+    const quote = await DatabaseService.getQuote(req.params.id);
+    res.json({
+      status: 'success',
+      quote: {
+        quoteId: quote.quoteId,
+        premium: quote.premium,
+        currency: quote.currency,
+        coverageAmount: quote.coverageAmount,
+        terms: quote.terms,
+        expiresAt: quote.expiresAt,
+        status: quote.status,
+        deductible: quote.deductible || 0
+      }
+    });
+  } catch (error) {
+    res.status(404).json({
+      status: 'error',
+      error: 'Quote not found',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @route GET /api/insurance/bookings/:id
+ * @desc Get booking details by ID
+ * @access Public
+ */
+router.get('/bookings/:id', async (req, res) => {
+  try {
+    // Only use database lookup for GET requests
+    const booking = await DatabaseService.getBooking(req.params.id);
+    res.json({
+      status: 'success',
+      booking: {
+        bookingId: booking.bookingId,
+        quoteId: booking.quoteId,
+        policyNumber: booking.policyNumber,
+        certificateUrl: booking.certificateUrl,
+        status: booking.status,
+        premium: booking.premium,
+        coverageAmount: booking.coverageAmount,
+        timestamp: booking.createdAt
+      }
+    });
+  } catch (error) {
+    res.status(404).json({
+      status: 'error',
+      error: 'Booking not found',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @route GET /api/insurance/certificates/:number
+ * @desc Get certificate details by number
+ * @access Public
+ */
+router.get('/certificates/:number', async (req, res) => {
+  try {
+    // Only use database lookup for GET requests
+    const certificate = await DatabaseService.getCertificate(req.params.number);
+    res.json({
+      status: 'success',
+      certificate: {
+        certificateNumber: certificate.certificateNumber,
+        productName: certificate.productName,
+        productId: certificate.productId,
+        status: certificate.status,
+        coverageAmount: certificate.coverageAmount,
+        premium: certificate.premium,
+        certificateLink: certificate.certificateLink,
+        validFrom: certificate.validFrom,
+        validTo: certificate.validTo
+      }
+    });
+  } catch (error) {
+    res.status(404).json({
+      status: 'error',
+      error: 'Certificate not found',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @route GET /api/insurance/stats
+ * @desc Get insurance statistics
+ * @access Public
+ */
+router.get('/stats', async (req, res) => {
+  try {
+    // Clean up expired quotes first
+    const updatedCount = await DatabaseService.updateExpiredQuotes();
+    if (updatedCount > 0) {
+      console.log(`Updated ${updatedCount} expired quotes`);
+    }
+    
+    // Get statistics from database
+    const stats = await DatabaseService.getStatistics();
+    res.json({
+      status: 'success',
+      stats
+    });
+  } catch (error) {
+    console.error('Error getting insurance statistics:', error);
+    res.status(500).json({
+      status: 'error',
+      error: 'Failed to get insurance statistics',
+      message: error.message
+    });
+  }
+});
 
 module.exports = { router, initialize };

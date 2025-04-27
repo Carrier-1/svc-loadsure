@@ -1,10 +1,9 @@
-// Loadsure Service for handling insurance quotes and bookings
-// This service connects to RabbitMQ for message handling and uses an in-memory store for quotes and bookings.
+// backend/src/services/loadsureService.js
 const amqp = require('amqplib');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config');
-// Fix import statement - use lowercase to match the actual filename
-const LoadsureApiService = require('./loadsureApiService');  // Changed from './LoadsureApiService'
+const LoadsureApiService = require('./loadsureApiService');
+const DatabaseService = require('./databaseService');
 
 /**
  * Main service for handling Loadsure integration through message queues
@@ -15,6 +14,9 @@ async function startService() {
     const connection = await amqp.connect(config.RABBITMQ_URL);
     const channel = await connection.createChannel();
     
+    // Set prefetch to 1 to ensure we only process one message at a time
+    channel.prefetch(1);
+    
     // Ensure queues exist
     await channel.assertQueue(config.QUEUE_QUOTE_REQUESTED, { durable: true });
     await channel.assertQueue(config.QUEUE_QUOTE_RECEIVED, { durable: true });
@@ -22,6 +24,9 @@ async function startService() {
     await channel.assertQueue(config.QUEUE_BOOKING_CONFIRMED, { durable: true });
     
     console.log('Loadsure Service: RabbitMQ connection established');
+    
+    // Initialize database
+    await DatabaseService.initialize();
     
     // Initialize Loadsure API service
     const loadsureApi = new LoadsureApiService(
@@ -54,8 +59,11 @@ async function startService() {
           // Add request ID to the quote
           quote.requestId = data.requestId;
           
+          // Save quote to database BEFORE acknowledging the message
+          await DatabaseService.saveQuote(quote, freightDetails);
+          
           // Publish quote received event
-          channel.sendToQueue(
+          await channel.sendToQueue(
             config.QUEUE_QUOTE_RECEIVED,
             Buffer.from(JSON.stringify(quote)),
             { persistent: true }
@@ -63,7 +71,7 @@ async function startService() {
           
           console.log(`Quote received event published for request: ${data.requestId}`);
           
-          // Acknowledge the message
+          // Only acknowledge the message AFTER saving to database and publishing event
           channel.ack(msg);
         } catch (error) {
           console.error('Error processing quote request:', error);
@@ -111,8 +119,11 @@ async function startService() {
           // Add request ID to the booking
           booking.requestId = data.requestId;
           
+          // Save booking to database BEFORE acknowledging the message
+          await DatabaseService.saveBooking(booking, data);
+          
           // Publish booking confirmed event
-          channel.sendToQueue(
+          await channel.sendToQueue(
             config.QUEUE_BOOKING_CONFIRMED,
             Buffer.from(JSON.stringify(booking)),
             { persistent: true }
@@ -120,7 +131,7 @@ async function startService() {
           
           console.log(`Booking confirmed event published for request: ${data.requestId}`);
           
-          // Acknowledge the message
+          // Only acknowledge the message AFTER saving to database and publishing event
           channel.ack(msg);
         } catch (error) {
           console.error('Error processing booking request:', error);
@@ -155,6 +166,9 @@ async function startService() {
       }
     });
     
+    // Start scheduled tasks
+    startScheduledTasks();
+    
     // Handle connection close
     connection.on('close', (err) => {
       console.error('Loadsure Service: RabbitMQ connection closed', err);
@@ -168,6 +182,23 @@ async function startService() {
     console.log('Attempting to reconnect in 5 seconds...');
     setTimeout(startService, 5000);
   }
+}
+
+/**
+ * Start scheduled tasks
+ */
+function startScheduledTasks() {
+  // Update expired quotes every hour
+  setInterval(async () => {
+    try {
+      const count = await DatabaseService.updateExpiredQuotes();
+      if (count > 0) {
+        console.log(`Updated ${count} expired quotes`);
+      }
+    } catch (error) {
+      console.error('Error in scheduled task:', error);
+    }
+  }, 60 * 60 * 1000); // Every hour
 }
 
 // Start the service
