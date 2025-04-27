@@ -1,4 +1,3 @@
-<!-- File: src/components/CargoInsurance.vue -->
 <template>
   <div class="cargo-insurance">
     <h2>Cargo Insurance</h2>
@@ -18,20 +17,34 @@
           <input id="freight-description" v-model="freightDetails.description" type="text" placeholder="E.g., Electronics, Furniture, etc.">
         </div>
         
-        <div class="form-row">
-          <div class="form-group">
-            <label for="freight-class">Freight Class</label>
-            <select id="freight-class" v-model="freightDetails.freightClass">
-              <option v-for="freightClass in freightClasses" :key="freightClass.id" :value="freightClass.id">
-                {{ freightClass.name }}
-              </option>
-            </select>
+        <!-- Multiple Freight Classes -->
+        <div class="multi-section">
+          <h4>Freight Classes</h4>
+          <div v-for="(freightClass, index) in freightDetails.freightClasses" :key="`freight-class-${index}`" class="multi-item">
+            <div class="form-row">
+              <div class="form-group flex-grow">
+                <label :for="`freight-class-${index}`">Freight Class</label>
+                <select :id="`freight-class-${index}`" v-model="freightDetails.freightClasses[index].classId">
+                  <option v-for="fc in freightClasses" :key="fc.id" :value="fc.id">
+                    {{ fc.name }}
+                  </option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label :for="`freight-percentage-${index}`">Percentage (%)</label>
+                <input :id="`freight-percentage-${index}`" v-model.number="freightDetails.freightClasses[index].percentage" type="number" min="1" max="100" step="1">
+              </div>
+              <button type="button" @click="removeFreightClass(index)" class="remove-btn" :disabled="freightDetails.freightClasses.length <= 1">
+                &times;
+              </button>
+            </div>
           </div>
-          
-          <div class="form-group">
-            <label for="freight-value">Value ($)</label>
-            <input id="freight-value" v-model.number="freightDetails.value" type="number" min="1" step="1">
-          </div>
+          <button type="button" @click="addFreightClass" class="add-btn">Add Another Freight Class</button>
+        </div>
+        
+        <div class="form-group">
+          <label for="freight-value">Cargo Value ($)</label>
+          <input id="freight-value" v-model.number="freightDetails.value" type="number" min="1" step="1">
         </div>
         
         <h4>Dimensions</h4>
@@ -76,7 +89,38 @@
           </div>
         </div>
         
-        <h4>Equipment Type</h4>
+        <!-- Multiple Commodities -->
+        <div class="multi-section">
+          <h4>Commodities</h4>
+          <div v-for="(commodity, index) in freightDetails.commodities" :key="`commodity-${index}`" class="multi-item">
+            <div class="form-row">
+              <div class="form-group flex-grow">
+                <label :for="`commodity-${index}`">Commodity</label>
+                <select :id="`commodity-${index}`" v-model="freightDetails.commodities[index].id">
+                  <option v-for="c in commodities" :key="c.id" :value="c.id">
+                    {{ c.name }}
+                  </option>
+                </select>
+              </div>
+              <button type="button" @click="removeCommodity(index)" class="remove-btn" :disabled="freightDetails.commodities.length <= 1">
+                &times;
+              </button>
+            </div>
+            
+            <!-- Show exclusions for selected commodity if any -->
+            <div v-if="hasCommodityExclusions(commodity.id)" class="exclusion-warning">
+              <p>Please note: This commodity has exclusions or restrictions.</p>
+              <ul>
+                <li v-for="(exclusion, exIndex) in getCommodityExclusionsById(commodity.id)" :key="exIndex">
+                  {{ exclusion.name }}
+                </li>
+              </ul>
+            </div>
+          </div>
+          <button type="button" @click="addCommodity" class="add-btn">Add Another Commodity</button>
+        </div>
+        
+        <h4>Equipment & Load Type</h4>
         <div class="form-row">
           <div class="form-group">
             <label for="equipment-type">Equipment Type</label>
@@ -86,57 +130,7 @@
               </option>
             </select>
           </div>
-        </div>
-        
-        <h4>Route</h4>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="origin-city">Origin City</label>
-            <input id="origin-city" v-model="freightDetails.originCity" type="text" placeholder="City">
-          </div>
           
-          <div class="form-group">
-            <label for="origin-state">Origin State</label>
-            <input id="origin-state" v-model="freightDetails.originState" type="text" placeholder="State">
-          </div>
-        </div>
-        
-        <div class="form-row">
-          <div class="form-group">
-            <label for="destination-city">Destination City</label>
-            <input id="destination-city" v-model="freightDetails.destinationCity" type="text" placeholder="City">
-          </div>
-          
-          <div class="form-group">
-            <label for="destination-state">Destination State</label>
-            <input id="destination-state" v-model="freightDetails.destinationState" type="text" placeholder="State">
-          </div>
-        </div>
-        
-        <h4>Commodity</h4>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="commodity">Commodity</label>
-            <select id="commodity" v-model="freightDetails.commodityId">
-              <option v-for="commodity in commodities" :key="commodity.id" :value="commodity.id">
-                {{ commodity.name }}
-              </option>
-            </select>
-            
-            <!-- Show exclusions for selected commodity if any -->
-            <div v-if="selectedCommodityHasExclusions" class="exclusion-warning">
-              <p>Please note: This commodity has exclusions or restrictions.</p>
-              <ul>
-                <li v-for="(exclusion, index) in commodityExclusionsForSelected" :key="index">
-                  {{ exclusion.name }}
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-        
-        <h4>Load Type</h4>
-        <div class="form-row">
           <div class="form-group">
             <label for="load-type">Load Type</label>
             <select id="load-type" v-model="freightDetails.loadTypeId">
@@ -147,44 +141,196 @@
           </div>
         </div>
         
-        <!-- Carrier Information -->
-        <h4>Carrier Information (Optional)</h4>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="carrier-name">Carrier Name</label>
-            <input id="carrier-name" v-model="freightDetails.carrierName" type="text" placeholder="Carrier Name">
+        <!-- Multiple Stops -->
+        <div class="multi-section">
+          <h4>Stops</h4>
+          <div v-for="(stop, index) in freightDetails.stops" :key="`stop-${index}`" class="multi-item">
+            <div class="stop-header">
+              <h5>{{ getStopTypeLabel(stop.stopType) }} (Stop #{{ index + 1 }})</h5>
+              <button type="button" @click="removeStop(index)" class="remove-btn" 
+                      :disabled="index < 2 || freightDetails.stops.length <= 2">
+                &times;
+              </button>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label :for="`stop-type-${index}`">Stop Type</label>
+                <select :id="`stop-type-${index}`" v-model="stop.stopType" :disabled="index < 2">
+                  <option value="PICKUP">Pickup</option>
+                  <option value="DELIVERY">Delivery</option>
+                  <option value="INTERMEDIATE">Intermediate</option>
+                </select>
+              </div>
+              
+              <div class="form-group">
+                <label :for="`stop-date-${index}`">Date</label>
+                <input :id="`stop-date-${index}`" v-model="stop.date" type="date">
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label :for="`stop-city-${index}`">City</label>
+                <input :id="`stop-city-${index}`" v-model="stop.address.city" type="text" placeholder="City">
+              </div>
+              
+              <div class="form-group">
+                <label :for="`stop-state-${index}`">State</label>
+                <input :id="`stop-state-${index}`" v-model="stop.address.state" type="text" placeholder="State">
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label :for="`stop-address-${index}`">Address</label>
+                <input :id="`stop-address-${index}`" v-model="stop.address.address1" type="text" placeholder="Address Line 1">
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label :for="`stop-address2-${index}`">Address Line 2 (Optional)</label>
+                <input :id="`stop-address2-${index}`" v-model="stop.address.address2" type="text" placeholder="Address Line 2">
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label :for="`stop-postal-${index}`">Postal Code</label>
+                <input :id="`stop-postal-${index}`" v-model="stop.address.postal" type="text" placeholder="Postal Code">
+              </div>
+              
+              <div class="form-group">
+                <label :for="`stop-country-${index}`">Country</label>
+                <input :id="`stop-country-${index}`" v-model="stop.address.country" type="text" placeholder="Country" value="USA">
+              </div>
+            </div>
           </div>
-          
-          <div class="form-group">
-            <label for="carrier-dot">DOT Number</label>
-            <input id="carrier-dot" v-model="freightDetails.carrierDotNumber" type="text" placeholder="DOT Number">
+          <button type="button" @click="addStop" class="add-btn">Add Another Stop</button>
+        </div>
+        
+        <!-- Multiple Carriers -->
+        <div class="multi-section">
+          <h4>Carriers</h4>
+          <div v-for="(carrier, index) in freightDetails.carriers" :key="`carrier-${index}`" class="multi-item">
+            <div class="carrier-header">
+              <h5>Carrier #{{ index + 1 }}</h5>
+              <button type="button" @click="removeCarrier(index)" class="remove-btn" :disabled="freightDetails.carriers.length <= 1">
+                &times;
+              </button>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label :for="`carrier-mode-${index}`">Mode</label>
+                <select :id="`carrier-mode-${index}`" v-model="carrier.mode">
+                  <option value="ROAD">Road</option>
+                  <option value="SEA">Sea</option>
+                  <option value="AIR">Air</option>
+                  <option value="RAIL">Rail</option>
+                </select>
+              </div>
+              
+              <div class="form-group">
+                <label :for="`carrier-name-${index}`">Name (Optional)</label>
+                <input :id="`carrier-name-${index}`" v-model="carrier.name" type="text" placeholder="Carrier Name">
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label :for="`carrier-dot-${index}`">DOT Number (Optional)</label>
+                <input :id="`carrier-dot-${index}`" v-model="carrier.carrierId.value" type="text" placeholder="DOT Number">
+              </div>
+              
+              <div class="form-group">
+                <label :for="`carrier-id-type-${index}`">ID Type</label>
+                <select :id="`carrier-id-type-${index}`" v-model="carrier.carrierId.type">
+                  <option value="USDOT">USDOT</option>
+                  <option value="MC">MC</option>
+                  <option value="SCAC">SCAC</option>
+                </select>
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label :for="`carrier-email-${index}`">Email (Optional)</label>
+                <input :id="`carrier-email-${index}`" v-model="carrier.email" type="email" placeholder="Carrier Email">
+              </div>
+              
+              <div class="form-group">
+                <label :for="`carrier-phone-${index}`">Phone (Optional)</label>
+                <input :id="`carrier-phone-${index}`" v-model="carrier.phone" type="text" placeholder="Carrier Phone">
+              </div>
+            </div>
           </div>
+          <button type="button" @click="addCarrier" class="add-btn">Add Another Carrier</button>
         </div>
         
         <!-- User / Assured Information -->
-        <h4>User Information (Optional)</h4>
+        <h4>User Information</h4>
         <div class="form-row">
           <div class="form-group">
             <label for="user-name">Your Name</label>
-            <input id="user-name" v-model="freightDetails.userName" type="text" placeholder="Your Name">
+            <input id="user-name" v-model="freightDetails.user.name" type="text" placeholder="Your Name">
           </div>
           
           <div class="form-group">
             <label for="user-email">Your Email</label>
-            <input id="user-email" v-model="freightDetails.userEmail" type="email" placeholder="Your Email">
+            <input id="user-email" v-model="freightDetails.user.email" type="email" placeholder="Your Email">
           </div>
         </div>
         
-        <h4>Assured Information (Optional)</h4>
+        <h4>Assured Information</h4>
         <div class="form-row">
           <div class="form-group">
             <label for="assured-name">Company Name</label>
-            <input id="assured-name" v-model="freightDetails.assuredName" type="text" placeholder="Company Name">
+            <input id="assured-name" v-model="freightDetails.assured.name" type="text" placeholder="Company Name">
           </div>
           
           <div class="form-group">
             <label for="assured-email">Company Email</label>
-            <input id="assured-email" v-model="freightDetails.assuredEmail" type="email" placeholder="Company Email">
+            <input id="assured-email" v-model="freightDetails.assured.email" type="email" placeholder="Company Email">
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="assured-address1">Address</label>
+            <input id="assured-address1" v-model="freightDetails.assured.address.address1" type="text" placeholder="Address Line 1">
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="assured-address2">Address Line 2 (Optional)</label>
+            <input id="assured-address2" v-model="freightDetails.assured.address.address2" type="text" placeholder="Address Line 2">
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="assured-city">City</label>
+            <input id="assured-city" v-model="freightDetails.assured.address.city" type="text" placeholder="City">
+          </div>
+          
+          <div class="form-group">
+            <label for="assured-state">State</label>
+            <input id="assured-state" v-model="freightDetails.assured.address.state" type="text" placeholder="State">
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="assured-postal">Postal Code</label>
+            <input id="assured-postal" v-model="freightDetails.assured.address.postal" type="text" placeholder="Postal Code">
+          </div>
+          
+          <div class="form-group">
+            <label for="assured-country">Country</label>
+            <input id="assured-country" v-model="freightDetails.assured.address.country" type="text" value="USA">
           </div>
         </div>
       </div>
@@ -388,10 +534,9 @@ export default {
       certificate: null,
       certificateNumber: '',
       
-      // Form data using primitives for simpler API
+      // Enhanced form data for Loadsure API
       freightDetails: {
         description: '',
-        freightClass: '',
         value: 10000,
         currency: 'USD',
         dimensionLength: 48,
@@ -400,21 +545,89 @@ export default {
         dimensionUnit: 'in',
         weightValue: 500,
         weightUnit: 'lbs',
-        commodityId: null,
-        loadTypeId: null,
         equipmentTypeId: null,
-        originCity: '',
-        originState: '',
-        destinationCity: '',
-        destinationState: '',
-        carrierName: '',
-        carrierEmail: '',
-        carrierPhone: '',
-        carrierDotNumber: '',
-        userName: '',
-        userEmail: '',
-        assuredName: '',
-        assuredEmail: ''
+        loadTypeId: null,
+        
+        // Multiple freight classes
+        freightClasses: [
+          { classId: '', percentage: 100 }
+        ],
+        
+        // Multiple commodities
+        commodities: [
+          { id: null }
+        ],
+        
+        // Multiple stops (origin and destination required)
+        stops: [
+          {
+            stopType: 'PICKUP',
+            stopNumber: 1,
+            date: this.getCurrentDate(),
+            address: {
+              address1: '',
+              address2: '',
+              city: '',
+              state: '',
+              postal: '',
+              country: 'USA'
+            }
+          },
+          {
+            stopType: 'DELIVERY',
+            stopNumber: 2,
+            date: this.getFutureDate(7),
+            address: {
+              address1: '',
+              address2: '',
+              city: '',
+              state: '',
+              postal: '',
+              country: 'USA'
+            }
+          }
+        ],
+        
+        // Multiple carriers
+        carriers: [
+          {
+            mode: 'ROAD',
+            name: '',
+            email: '',
+            phone: '',
+            carrierId: {
+              type: 'USDOT',
+              value: ''
+            }
+          }
+        ],
+        
+        // User information
+        user: {
+          name: '',
+          email: '',
+          id: ''  // Will be set from email
+        },
+        
+        // Assured information
+        assured: {
+          name: '',
+          email: '',
+          address: {
+            address1: '',
+            address2: '',
+            city: '',
+            state: '',
+            postal: '',
+            country: 'USA'
+          }
+        },
+        
+        // Additional fields for API v2
+        freightId: `FR-${Date.now().toString().substring(7)}`,
+        poNumber: '',
+        pickupDate: this.getCurrentDate(),
+        deliveryDate: this.getFutureDate(7)
       }
     };
   },
@@ -460,28 +673,57 @@ export default {
     
     isFormValid() {
       const { freightDetails } = this;
-      return (
-        freightDetails.description &&
-        freightDetails.freightClass &&
-        freightDetails.value > 0 &&
-        freightDetails.originCity &&
-        freightDetails.originState &&
-        freightDetails.destinationCity &&
-        freightDetails.destinationState
+      
+      // Check user and assured information
+      if (!freightDetails.user.name || !freightDetails.user.email ||
+          !freightDetails.assured.name || !freightDetails.assured.email ||
+          !freightDetails.assured.address.address1 || 
+          !freightDetails.assured.address.city || 
+          !freightDetails.assured.address.state || 
+          !freightDetails.assured.address.postal) {
+        return false;
+      }
+      
+      // Check basic freight details
+      if (!freightDetails.description || 
+          !freightDetails.value || 
+          freightDetails.value <= 0) {
+        return false;
+      }
+      
+      // Validate stops (need at least pickup and delivery)
+      if (freightDetails.stops.length < 2) {
+        return false;
+      }
+      
+      // Validate stop addresses
+      for (const stop of freightDetails.stops) {
+        if (!stop.address.city || !stop.address.state) {
+          return false;
+        }
+      }
+      
+      // Check at least one freight class is selected
+      if (freightDetails.freightClasses.length === 0 || 
+          !freightDetails.freightClasses[0].classId) {
+        return false;
+      }
+      
+      // Check at least one commodity is selected
+      if (freightDetails.commodities.length === 0 || 
+          !freightDetails.commodities[0].id) {
+        return false;
+      }
+      
+      // Make sure freight class percentages add up to 100%
+      const totalPercentage = freightDetails.freightClasses.reduce(
+        (sum, fc) => sum + (fc.percentage || 0), 0
       );
-    },
-    
-    selectedCommodityHasExclusions() {
-      return this.commodityExclusionsForSelected.length > 0;
-    },
-    
-    commodityExclusionsForSelected() {
-      // In a real implementation, you would check if the selected commodity
-      // has any exclusions based on the data from the API
-      // This is a simplified example
-      return this.freightDetails.commodityId ? 
-        this.commodityExclusions.filter(e => e.id === 'related-to-commodity-' + this.freightDetails.commodityId) : 
-        [];
+      if (totalPercentage !== 100) {
+        return false;
+      }
+      
+      return true;
     },
     
     formatLastUpdated() {
@@ -504,13 +746,15 @@ export default {
   watch: {
     // When support data is loaded, set default values
     freightClasses(newClasses) {
-      if (newClasses.length > 0 && !this.freightDetails.freightClass) {
-        this.freightDetails.freightClass = newClasses[0].id;
+      if (newClasses.length > 0 && this.freightDetails.freightClasses.length > 0 && 
+          !this.freightDetails.freightClasses[0].classId) {
+        this.freightDetails.freightClasses[0].classId = newClasses[0].id;
       }
     },
     commodities(newCommodities) {
-      if (newCommodities.length > 0 && !this.freightDetails.commodityId) {
-        this.freightDetails.commodityId = newCommodities[0].id;
+      if (newCommodities.length > 0 && this.freightDetails.commodities.length > 0 && 
+          !this.freightDetails.commodities[0].id) {
+        this.freightDetails.commodities[0].id = newCommodities[0].id;
       }
     },
     loadTypes(newLoadTypes) {
@@ -521,6 +765,13 @@ export default {
     equipmentTypes(newEquipmentTypes) {
       if (newEquipmentTypes.length > 0 && !this.freightDetails.equipmentTypeId) {
         this.freightDetails.equipmentTypeId = newEquipmentTypes[0].id;
+      }
+    },
+    
+    // Set user ID when email changes
+    'freightDetails.user.email'(newEmail) {
+      if (newEmail) {
+        this.freightDetails.user.id = newEmail;
       }
     }
   },
@@ -538,6 +789,175 @@ export default {
       this.refreshSupportDataAction();
     },
     
+    // Helper methods for date handling
+    getCurrentDate() {
+      const today = new Date();
+      return this.formatDateForInput(today);
+    },
+    
+    getFutureDate(days) {
+      const date = new Date();
+      date.setDate(date.getDate() + days);
+      return this.formatDateForInput(date);
+    },
+    
+    formatDateForInput(date) {
+      return date.toISOString().split('T')[0];
+    },
+    
+    // Methods for handling multiple elements
+    addFreightClass() {
+      this.freightDetails.freightClasses.push({ 
+        classId: this.freightDetails.freightClasses[0].classId, 
+        percentage: 0 
+      });
+      this.updateFreightClassPercentages();
+    },
+    
+    removeFreightClass(index) {
+      if (this.freightDetails.freightClasses.length > 1) {
+        this.freightDetails.freightClasses.splice(index, 1);
+        this.updateFreightClassPercentages();
+      }
+    },
+    
+    updateFreightClassPercentages() {
+      // Recalculate percentages to ensure they add up to 100%
+      const count = this.freightDetails.freightClasses.length;
+      const percentPerClass = Math.floor(100 / count);
+      let remainder = 100 - (percentPerClass * count);
+      
+      this.freightDetails.freightClasses.forEach((fc, index) => {
+        fc.percentage = percentPerClass + (index === 0 ? remainder : 0);
+      });
+    },
+    
+    addCommodity() {
+      this.freightDetails.commodities.push({ 
+        id: this.freightDetails.commodities[0].id
+      });
+    },
+    
+    removeCommodity(index) {
+      if (this.freightDetails.commodities.length > 1) {
+        this.freightDetails.commodities.splice(index, 1);
+      }
+    },
+    
+    addStop() {
+      const newStopNumber = this.freightDetails.stops.length + 1;
+      // Default to intermediate for new stops (after origin and destination)
+      this.freightDetails.stops.push({
+        stopType: 'INTERMEDIATE',
+        stopNumber: newStopNumber,
+        date: this.getFutureDate(3), // Default to a date between pickup and delivery
+        address: {
+          address1: '',
+          address2: '',
+          city: '',
+          state: '',
+          postal: '',
+          country: 'USA'
+        }
+      });
+    },
+    
+    removeStop(index) {
+      // Don't allow removing the first two stops (origin and destination)
+      if (index >= 2 && this.freightDetails.stops.length > 2) {
+        this.freightDetails.stops.splice(index, 1);
+        // Update stop numbers
+        this.freightDetails.stops.forEach((stop, i) => {
+          stop.stopNumber = i + 1;
+        });
+      }
+    },
+    
+    addCarrier() {
+      this.freightDetails.carriers.push({
+        mode: 'ROAD',
+        name: '',
+        email: '',
+        phone: '',
+        carrierId: {
+          type: 'USDOT',
+          value: ''
+        }
+      });
+    },
+    
+    removeCarrier(index) {
+      if (this.freightDetails.carriers.length > 1) {
+        this.freightDetails.carriers.splice(index, 1);
+      }
+    },
+    
+    getStopTypeLabel(stopType) {
+      switch (stopType) {
+        case 'PICKUP': return 'Origin';
+        case 'DELIVERY': return 'Destination';
+        case 'INTERMEDIATE': return 'Stop';
+        default: return 'Stop';
+      }
+    },
+    
+    hasCommodityExclusions(commodityId) {
+      return this.getCommodityExclusionsById(commodityId).length > 0;
+    },
+    
+    getCommodityExclusionsById(commodityId) {
+      return this.commodityExclusions.filter(e => 
+        e.id === 'related-to-commodity-' + commodityId || 
+        e.commodityId === commodityId
+      );
+    },
+    
+    // Format the freight details into the structure expected by the Loadsure API
+    formatLoadsurePayload() {
+      const { freightDetails } = this;
+      
+      // Set ID from email if not already set
+      if (!freightDetails.user.id && freightDetails.user.email) {
+        freightDetails.user.id = freightDetails.user.email;
+      }
+      
+      // Prepare cargo details
+      const cargo = {
+        cargoValue: {
+          currency: freightDetails.currency,
+          value: freightDetails.value
+        },
+        commodity: freightDetails.commodities.map(c => c.id),
+        fullDescriptionOfCargo: freightDetails.description,
+        weight: {
+          unit: freightDetails.weightUnit,
+          value: freightDetails.weightValue
+        },
+        freightClass: freightDetails.freightClasses.map(fc => ({
+          id: fc.classId,
+          percentage: fc.percentage
+        }))
+      };
+      
+      // Create the full payload structure expected by Loadsure API
+      return {
+        user: freightDetails.user,
+        assured: freightDetails.assured,
+        shipment: {
+          version: "2",
+          freightId: freightDetails.freightId,
+          poNumber: freightDetails.poNumber || `PO-${Date.now().toString().substring(7)}`,
+          pickupDate: freightDetails.stops[0].date,
+          deliveryDate: freightDetails.stops[1].date,
+          cargo: cargo,
+          carriers: freightDetails.carriers,
+          stops: freightDetails.stops,
+          loadType: freightDetails.loadTypeId,
+          equipmentType: freightDetails.equipmentTypeId
+        }
+      };
+    },
+    
     async requestQuote() {
       if (!this.isFormValid) return;
       
@@ -545,13 +965,16 @@ export default {
       this.loadingMessage = 'Getting insurance quote...';
       
       try {
-        // Call backend API using the new simplified endpoint
-        const response = await fetch('http://localhost:3000/api/insurance/quotes/simple', {
+        // Format the payload for Loadsure API
+        const loadsurePayload = this.formatLoadsurePayload();
+        
+        // Call backend API with the complete object
+        const response = await fetch('http://localhost:3000/api/insurance/quotes', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(this.freightDetails)
+          body: JSON.stringify(loadsurePayload)
         });
         
         if (!response.ok) {
@@ -627,7 +1050,7 @@ export default {
           },
           body: JSON.stringify({
             certificateNumber: this.certificateNumber,
-            userId: this.freightDetails.userEmail || 'user@example.com'
+            userId: this.freightDetails.user.email || this.freightDetails.user.id || 'user@example.com'
           })
         });
         
@@ -662,10 +1085,9 @@ export default {
       this.certificate = null;
       this.certificateNumber = '';
       
-      // Reset form data with default values from loaded data
+      // Reset form data with default values
       this.freightDetails = {
         description: '',
-        freightClass: this.freightClasses.length > 0 ? this.freightClasses[0].id : '',
         value: 10000,
         currency: 'USD',
         dimensionLength: 48,
@@ -674,21 +1096,92 @@ export default {
         dimensionUnit: 'in',
         weightValue: 500,
         weightUnit: 'lbs',
-        commodityId: this.commodities.length > 0 ? this.commodities[0].id : null,
-        loadTypeId: this.loadTypes.length > 0 ? this.loadTypes[0].id : null,
         equipmentTypeId: this.equipmentTypes.length > 0 ? this.equipmentTypes[0].id : null,
-        originCity: '',
-        originState: '',
-        destinationCity: '',
-        destinationState: '',
-        carrierName: '',
-        carrierEmail: '',
-        carrierPhone: '',
-        carrierDotNumber: '',
-        userName: '',
-        userEmail: '',
-        assuredName: '',
-        assuredEmail: ''
+        loadTypeId: this.loadTypes.length > 0 ? this.loadTypes[0].id : null,
+        
+        // Reset freight classes
+        freightClasses: [
+          { 
+            classId: this.freightClasses.length > 0 ? this.freightClasses[0].id : '', 
+            percentage: 100 
+          }
+        ],
+        
+        // Reset commodities
+        commodities: [
+          { id: this.commodities.length > 0 ? this.commodities[0].id : null }
+        ],
+        
+        // Reset stops to origin and destination only
+        stops: [
+          {
+            stopType: 'PICKUP',
+            stopNumber: 1,
+            date: this.getCurrentDate(),
+            address: {
+              address1: '',
+              address2: '',
+              city: '',
+              state: '',
+              postal: '',
+              country: 'USA'
+            }
+          },
+          {
+            stopType: 'DELIVERY',
+            stopNumber: 2,
+            date: this.getFutureDate(7),
+            address: {
+              address1: '',
+              address2: '',
+              city: '',
+              state: '',
+              postal: '',
+              country: 'USA'
+            }
+          }
+        ],
+        
+        // Reset carriers
+        carriers: [
+          {
+            mode: 'ROAD',
+            name: '',
+            email: '',
+            phone: '',
+            carrierId: {
+              type: 'USDOT',
+              value: ''
+            }
+          }
+        ],
+        
+        // Reset user information
+        user: {
+          name: '',
+          email: '',
+          id: ''
+        },
+        
+        // Reset assured information
+        assured: {
+          name: '',
+          email: '',
+          address: {
+            address1: '',
+            address2: '',
+            city: '',
+            state: '',
+            postal: '',
+            country: 'USA'
+          }
+        },
+        
+        // Reset additional fields
+        freightId: `FR-${Date.now().toString().substring(7)}`,
+        poNumber: '',
+        pickupDate: this.getCurrentDate(),
+        deliveryDate: this.getFutureDate(7)
       };
     },
     
@@ -756,6 +1249,10 @@ export default {
   margin-bottom: 15px;
 }
 
+.flex-grow {
+  flex-grow: 1;
+}
+
 .form-row {
   display: flex;
   gap: 15px;
@@ -774,6 +1271,74 @@ input, select {
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 14px;
+}
+
+.multi-section {
+  margin-bottom: 25px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 15px;
+  background-color: #f5f5f5;
+}
+
+.multi-item {
+  background-color: white;
+  border-radius: 6px;
+  padding: 15px;
+  margin-bottom: 15px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.stop-header, .carrier-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+h5 {
+  margin: 0;
+  color: #444;
+}
+
+.add-btn {
+  background-color: #4285f4;
+  color: white;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  width: auto;
+}
+
+.add-btn:hover {
+  background-color: #3367d6;
+}
+
+.remove-btn {
+  background-color: #f44336;
+  color: white;
+  font-size: 16px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.remove-btn:hover {
+  background-color: #d32f2f;
+}
+
+.remove-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
 }
 
 .exclusion-warning {

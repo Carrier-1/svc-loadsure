@@ -3,7 +3,7 @@
 const amqp = require('amqplib');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config');
-const LoadsureApiService = require('./loadsureApiService');
+const LoadsureApiService = require('./LoadsureApiService');
 
 /**
  * Main service for handling Loadsure integration through message queues
@@ -35,15 +35,19 @@ async function startService() {
           const data = JSON.parse(msg.content.toString());
           console.log(`Processing quote request: ${data.requestId}`);
           
-          // Determine if we're getting a full freightDetails object or primitives
           let quote;
-          if (data.payload.freightDetails.isPrimitives) {
-            // Using primitives
-            const primitives = data.payload.freightDetails;
-            quote = await loadsureApi.getQuoteFromPrimitives(primitives);
+          const freightDetails = data.payload.freightDetails;
+          
+          // Check what type of request we're dealing with
+          if (freightDetails.isPrimitives) {
+            // Using primitives approach
+            quote = await loadsureApi.getQuoteFromPrimitives(freightDetails);
+          } else if (freightDetails.shipment) {
+            // Using full API v2 structure (already in the correct format)
+            quote = await loadsureApi.getQuote(freightDetails);
           } else {
-            // Using full object
-            quote = await loadsureApi.getQuote(data.payload.freightDetails);
+            // Using legacy object structure
+            quote = await loadsureApi.getQuote(freightDetails);
           }
           
           // Add request ID to the quote
@@ -72,17 +76,22 @@ async function startService() {
           
           // If it's a permanent error, we could send a failure event back to the API
           if (!isTemporaryError) {
-            const errorResponse = {
-              requestId: JSON.parse(msg.content.toString()).requestId,
-              error: error.message,
-              status: 'failed'
-            };
-            
-            channel.sendToQueue(
-              config.QUEUE_QUOTE_RECEIVED,
-              Buffer.from(JSON.stringify(errorResponse)),
-              { persistent: true }
-            );
+            try {
+              const messageData = JSON.parse(msg.content.toString());
+              const errorResponse = {
+                requestId: messageData.requestId,
+                error: error.message,
+                status: 'failed'
+              };
+              
+              channel.sendToQueue(
+                config.QUEUE_QUOTE_RECEIVED,
+                Buffer.from(JSON.stringify(errorResponse)),
+                { persistent: true }
+              );
+            } catch (parseError) {
+              console.error('Error parsing message content:', parseError);
+            }
           }
         }
       }
@@ -124,17 +133,22 @@ async function startService() {
           
           // If it's a permanent error, we could send a failure event back to the API
           if (!isTemporaryError) {
-            const errorResponse = {
-              requestId: JSON.parse(msg.content.toString()).requestId,
-              error: error.message,
-              status: 'failed'
-            };
-            
-            channel.sendToQueue(
-              config.QUEUE_BOOKING_CONFIRMED,
-              Buffer.from(JSON.stringify(errorResponse)),
-              { persistent: true }
-            );
+            try {
+              const messageData = JSON.parse(msg.content.toString());
+              const errorResponse = {
+                requestId: messageData.requestId,
+                error: error.message,
+                status: 'failed'
+              };
+              
+              channel.sendToQueue(
+                config.QUEUE_BOOKING_CONFIRMED,
+                Buffer.from(JSON.stringify(errorResponse)),
+                { persistent: true }
+              );
+            } catch (parseError) {
+              console.error('Error parsing message content:', parseError);
+            }
           }
         }
       }

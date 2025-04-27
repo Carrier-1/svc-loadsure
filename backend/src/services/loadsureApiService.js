@@ -30,7 +30,7 @@ async function initializeFetch() {
  * Loadsure API Service
  * Integrates with Loadsure API endpoints for insurance quotes and booking
  */
-class loadsureApiService {
+class LoadsureApiService {
   constructor(apiKey, baseUrl) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
@@ -46,6 +46,33 @@ class loadsureApiService {
     if (!fetch) {
       await initializeFetch();
     }
+  }
+
+  /**
+   * Helper method to resolve commodity ID from freight class
+   * @param {String} freightClass - Freight class
+   * @returns {Number} Commodity ID
+   */
+  resolveCommodityIdFromFreightClass(freightClass) {
+    return supportDataService.mapFreightClassToCommodity(freightClass);
+  }
+  
+  /**
+   * Helper method to resolve default load type
+   * @returns {String} Default load type ID
+   */
+  resolveDefaultLoadType() {
+    const loadTypes = supportDataService.getLoadTypes();
+    return loadTypes.length > 0 ? loadTypes[0].id : 'FULL_TRUCKLOAD_1';
+  }
+  
+  /**
+   * Helper method to resolve default equipment type
+   * @returns {Number} Default equipment type ID
+   */
+  resolveDefaultEquipmentType() {
+    const equipmentTypes = supportDataService.getEquipmentTypes();
+    return equipmentTypes.find(et => et.name.toLowerCase().includes('dry van'))?.id || 2;
   }
 
   /**
@@ -65,8 +92,10 @@ class loadsureApiService {
     }
     
     try {
-      // Prepare the request payload according to Loadsure API specs
-      const payload = this.buildQuoteRequestPayload(freightDetails);
+      // Check if this is a complete payload or needs transformation
+      const payload = freightDetails.shipment ? 
+        freightDetails : // If it already has a shipment property, it's in the correct format
+        this.buildQuoteRequestPayload(freightDetails);
       
       const response = await fetch(`${this.baseUrl}/api/insureLoad/quote`, {
         method: 'POST',
@@ -146,53 +175,154 @@ class loadsureApiService {
     userName = null,
     userEmail = null,
     assuredName = null,
-    assuredEmail = null
+    assuredEmail = null,
+    
+    // Support for multiple freight classes, commodities, carriers, stops
+    freightClasses = null,
+    commodities = null,
+    carriers = null,
+    stops = null
   }) {
-    // Construct the freightDetails object from primitives
-    const freightDetails = {
-      description,
-      class: freightClass,
-      value: parseFloat(value),
-      currency,
-      commodityId: commodityId || this.resolveCommodityIdFromFreightClass(freightClass),
-      loadType: loadTypeId || this.resolveDefaultLoadType(),
-      equipmentTypeId: equipmentTypeId || this.resolveDefaultEquipmentType(),
-      dimensions: {
-        length: parseFloat(dimensionLength),
-        width: parseFloat(dimensionWidth),
-        height: parseFloat(dimensionHeight),
-        unit: dimensionUnit
-      },
-      weight: {
-        value: parseFloat(weightValue),
-        unit: weightUnit
-      },
-      origin: `${originCity}, ${originState}`,
-      destination: `${destinationCity}, ${destinationState}`,
-      
-      // Additional optional fields
-      pickupDate,
-      deliveryDate,
-      carrier: carrierName ? {
-        name: carrierName,
-        email: carrierEmail || 'info@example.com',
-        phone: carrierPhone || '555-555-5555',
-        dotNumber: carrierDotNumber
-      } : null,
-      
-      // User information
-      user: {
-        name: userName || 'User',
-        email: userEmail || 'user@example.com'
-      },
-      assured: {
-        name: assuredName || 'Assured Company',
-        email: assuredEmail || 'assured@example.com'
+    // Default dates if not provided
+    const today = new Date();
+    const nextWeek = new Date(today);
+    nextWeek.setDate(today.getDate() + 7);
+    
+    const formattedPickupDate = pickupDate || today.toISOString().split('T')[0];
+    const formattedDeliveryDate = deliveryDate || nextWeek.toISOString().split('T')[0];
+    
+    // Process freight classes
+    let resolvedFreightClasses = [];
+    if (freightClasses && Array.isArray(freightClasses) && freightClasses.length > 0) {
+      resolvedFreightClasses = freightClasses.map(fc => ({
+        id: supportDataService.formatFreightClass(fc.classId),
+        percentage: fc.percentage
+      }));
+    } else if (freightClass) {
+      // Legacy single freight class support
+      resolvedFreightClasses = [{
+        id: supportDataService.formatFreightClass(freightClass),
+        percentage: 100
+      }];
+    }
+    
+    // Process commodities
+    let resolvedCommodities = [];
+    if (commodities && Array.isArray(commodities) && commodities.length > 0) {
+      resolvedCommodities = commodities.map(c => c.id);
+    } else if (commodityId) {
+      // Legacy single commodity support
+      resolvedCommodities = [commodityId];
+    } else if (freightClass) {
+      // Fallback to mapping from freight class
+      resolvedCommodities = [this.resolveCommodityIdFromFreightClass(freightClass)];
+    }
+    
+    // Process carriers
+    let resolvedCarriers = [];
+    if (carriers && Array.isArray(carriers) && carriers.length > 0) {
+      resolvedCarriers = carriers;
+    } else {
+      // Create default carrier from primitive fields
+      resolvedCarriers = [{
+        mode: "ROAD",
+        name: carrierName || "Sample Carrier",
+        email: carrierEmail || "carrier@example.com",
+        phone: carrierPhone || "123-456-7890",
+        carrierId: {
+          type: "USDOT",
+          value: carrierDotNumber || "123456"
+        },
+        equipmentType: equipmentTypeId || this.resolveDefaultEquipmentType()
+      }];
+    }
+    
+    // Process stops
+    let resolvedStops = [];
+    if (stops && Array.isArray(stops) && stops.length > 0) {
+      resolvedStops = stops;
+    } else {
+      // Create default stops from origin and destination
+      resolvedStops = [
+        {
+          stopType: "PICKUP",
+          stopNumber: 1,
+          date: formattedPickupDate,
+          address: {
+            address1: "Pickup Address",
+            city: originCity || "Unknown",
+            state: originState || "Unknown",
+            postal: "12345",
+            country: "USA"
+          }
+        },
+        {
+          stopType: "DELIVERY",
+          stopNumber: 2,
+          date: formattedDeliveryDate,
+          address: {
+            address1: "Delivery Address",
+            city: destinationCity || "Unknown",
+            state: destinationState || "Unknown",
+            postal: "12345",
+            country: "USA"
+          }
+        }
+      ];
+    }
+    
+    // Create user and assured info
+    const userId = userEmail || "user@example.com";
+    const user = {
+      id: userId,
+      email: userEmail || "user@example.com",
+      name: userName || "User"
+    };
+    
+    const assured = {
+      name: assuredName || "Assured Company",
+      email: assuredEmail || "assured@example.com",
+      address: {
+        address1: "123 Business St",
+        city: originCity || "Unknown",
+        state: originState || "Unknown",
+        country: "USA",
+        postal: "12345"
+      }
+    };
+    
+    // Construct the full API payload
+    const payload = {
+      user,
+      assured,
+      shipment: {
+        version: "2",
+        freightId: `FR-${Date.now().toString().substring(7)}`,
+        poNumber: `PO-${Date.now().toString().substring(7)}`,
+        pickupDate: formattedPickupDate,
+        deliveryDate: formattedDeliveryDate,
+        cargo: {
+          cargoValue: {
+            currency: currency,
+            value: parseFloat(value)
+          },
+          commodity: resolvedCommodities,
+          fullDescriptionOfCargo: description,
+          weight: {
+            unit: weightUnit,
+            value: parseFloat(weightValue)
+          },
+          freightClass: resolvedFreightClasses
+        },
+        carriers: resolvedCarriers,
+        stops: resolvedStops,
+        loadType: loadTypeId || this.resolveDefaultLoadType(),
+        equipmentType: equipmentTypeId || this.resolveDefaultEquipmentType()
       }
     };
     
     // Call the main getQuote method with the constructed object
-    return this.getQuote(freightDetails);
+    return this.getQuote(payload);
   }
 
   /**
@@ -264,14 +394,40 @@ class loadsureApiService {
       deliveryDate,
       carrier,
       user,
-      assured
+      assured,
+      // Support for multiple elements
+      freightClasses = null,
+      commodities = null,
+      carriers = null,
+      stops = null
     } = freightDetails;
 
-    // Map freight class to commodity if not provided
-    const resolvedCommodityId = commodityId || supportDataService.mapFreightClassToCommodity(freightClass);
+    // Process freight classes
+    let resolvedFreightClasses = [];
+    if (freightClasses && Array.isArray(freightClasses) && freightClasses.length > 0) {
+      resolvedFreightClasses = freightClasses.map(fc => ({
+        id: supportDataService.formatFreightClass(fc.classId),
+        percentage: fc.percentage
+      }));
+    } else if (freightClass) {
+      // Legacy single freight class support
+      resolvedFreightClasses = [{
+        id: supportDataService.formatFreightClass(freightClass),
+        percentage: 100
+      }];
+    }
     
-    // Format freight class according to Loadsure's convention
-    const formattedFreightClass = supportDataService.formatFreightClass(freightClass);
+    // Process commodities
+    let resolvedCommodities = [];
+    if (commodities && Array.isArray(commodities) && commodities.length > 0) {
+      resolvedCommodities = commodities.map(c => c.id);
+    } else if (commodityId) {
+      // Legacy single commodity support
+      resolvedCommodities = [commodityId];
+    } else if (freightClass) {
+      // Fallback to mapping from freight class
+      resolvedCommodities = [supportDataService.mapFreightClassToCommodity(freightClass)];
+    }
     
     // Get equipment types from support data service
     const equipmentTypes = supportDataService.getEquipmentTypes();
@@ -281,9 +437,17 @@ class loadsureApiService {
                          equipmentTypes.find(et => et.name.toLowerCase().includes('dry van'))?.id || 
                          2;
 
-    // Parse origin and destination
-    const originParts = origin.split(',').map(part => part.trim());
-    const destinationParts = destination.split(',').map(part => part.trim());
+    // Parse origin and destination if they're provided as strings
+    let originParts = ['Unknown', 'Unknown'];
+    let destinationParts = ['Unknown', 'Unknown'];
+    
+    if (origin) {
+      originParts = origin.split(',').map(part => part.trim());
+    }
+    
+    if (destination) {
+      destinationParts = destination.split(',').map(part => part.trim());
+    }
     
     // Calculate dates if not provided
     const today = new Date();
@@ -293,30 +457,90 @@ class loadsureApiService {
     const formattedPickupDate = pickupDate || today.toISOString().split('T')[0];
     const formattedDeliveryDate = deliveryDate || nextWeek.toISOString().split('T')[0];
     
+    // Process carriers
+    let resolvedCarriers = [];
+    if (carriers && Array.isArray(carriers) && carriers.length > 0) {
+      resolvedCarriers = carriers;
+    } else if (carrier) {
+      // Legacy single carrier support
+      resolvedCarriers = [{
+        mode: "ROAD",
+        name: carrier.name || "Sample Carrier",
+        email: carrier.email || "carrier@example.com",
+        phone: carrier.phone || "123-456-7890",
+        carrierId: {
+          type: "USDOT",
+          value: carrier.dotNumber || "123456"
+        },
+        equipmentType: equipmentType
+      }];
+    } else {
+      // Default carrier
+      resolvedCarriers = [{
+        mode: "ROAD",
+        name: "Sample Carrier",
+        email: "carrier@example.com",
+        phone: "123-456-7890",
+        carrierId: {
+          type: "USDOT",
+          value: "123456"
+        },
+        equipmentType: equipmentType
+      }];
+    }
+    
+    // Process stops
+    let resolvedStops = [];
+    if (stops && Array.isArray(stops) && stops.length > 0) {
+      resolvedStops = stops;
+    } else {
+      // Create default stops from origin and destination
+      resolvedStops = [
+        {
+          stopType: "PICKUP",
+          stopNumber: 1,
+          date: formattedPickupDate,
+          address: {
+            address1: "Pickup Address",
+            city: originParts[0] || "Unknown",
+            state: originParts[1] || "Unknown",
+            postal: "12345",
+            country: "USA"
+          }
+        },
+        {
+          stopType: "DELIVERY",
+          stopNumber: 2,
+          date: formattedDeliveryDate,
+          address: {
+            address1: "Delivery Address",
+            city: destinationParts[0] || "Unknown",
+            state: destinationParts[1] || "Unknown",
+            postal: "12345",
+            country: "USA"
+          }
+        }
+      ];
+    }
+    
     // Default user information
     const defaultUser = {
       id: "internal-" + uuidv4().substring(0, 8),
       email: "user@example.com",
-      name: "User",
-      phone: "123-456-7890"
+      name: "User"
     };
     
     // Default assured information
     const defaultAssured = {
-      id: "internal-" + uuidv4().substring(0, 8),
       name: "Assured Company",
       email: "assured@example.com",
-      phone: "123-456-7890",
       address: {
         address1: "123 Business St",
-        address2: "Suite 100",
         city: originParts[0] || "Unknown",
         state: originParts[1] || "Unknown",
         country: "USA",
         postal: "12345"
-      },
-      ein: "123456789",
-      type: "RECIPIENT"
+      }
     };
     
     // Use provided user/assured info or defaults
@@ -346,126 +570,34 @@ class loadsureApiService {
       shipment: {
         version: "2",
         freightId: `FR-${Date.now().toString().substring(7)}`,
-        poNumber: "PO-123456",
+        poNumber: freightDetails.poNumber || `PO-${Date.now().toString().substring(7)}`,
         pickupDate: formattedPickupDate,
         deliveryDate: formattedDeliveryDate,
-        shipper: {
-          id: "internal-" + uuidv4().substring(0, 8),
-          name: "Shipper Company",
-          email: "shipper@example.com",
-          phone: "123-456-7890",
-          address: {
-            address1: "123 Shipper St",
-            address2: "Suite 100",
-            city: originParts[0] || "Unknown",
-            state: originParts[1] || "Unknown",
-            country: "USA",
-            postal: "12345"
-          },
-          ein: "987654321",
-          foundedInYear: 2000,
-          businessType: "CORPORATION",
-          descriptionOfOperations: "Shipper operations description",
-          annualShipments: 1000,
-          cargoClaimsLast3Years: 0
-        },
-        recipient: {
-          id: "internal-" + uuidv4().substring(0, 8),
-          name: "Recipient Company",
-          email: "recipient@example.com",
-          phone: "123-456-7890",
-          address: {
-            address1: "456 Recipient St",
-            address2: "Suite 200",
-            city: destinationParts[0] || "Unknown",
-            state: destinationParts[1] || "Unknown",
-            country: "USA",
-            postal: "54321"
-          },
-          ein: "123456789"
-        },
+        
         // Cargo details
         cargo: {
           cargoValue: {
             currency: currency,
-            value: value
+            value: parseFloat(value)
           },
-          commodity: resolvedCommodityId,
+          commodity: resolvedCommodities,
           fullDescriptionOfCargo: description,
           weight: {
-            unit: weight.unit,
-            value: weight.value
+            unit: weight ? weight.unit : 'lbs',
+            value: weight ? weight.value : 500
           },
-          freightClass: formattedFreightClass,
-          nmfcNumber: freightClass,
-          usedGoods: false,
-          containerization: "FULL_CONTAINER",
-          packaging: "PALLETIZED",
-          truckload: "FULL",
-          temperatureRange: {
-            unit:"F",
-            minimum: 0,
-            maximum: 100
-          },
-          storedpast30days: false,
-          termsofSale: "FOB",
-          notes: "Additional notes about the cargo",
-          marksAndNumbers: "Marks and numbers on the cargo",
-          fullDescriptionOfCargo: description
+          freightClass: resolvedFreightClasses
         },
         
-        // Carriers - using road by default
-        carriers: [{
-          mode: "ROAD",
-          name: carrier?.name || "Sample Carrier",
-          email: carrier?.email || "carrier@example.com",
-          phone: carrier?.phone || "123-456-7890",
-          carrierId: {
-            type: "USDOT",
-            value: carrier?.dotNumber || "123456"
-          },
-          address: {
-            address1: "789 Carrier St",
-            address2: "Suite 300",
-            city: originParts[0] || "Unknown",
-            state: originParts[1] || "Unknown",
-            country: "USA",
-            postal: "12345"
-          },
-          leg: 1,
-          legStopIds: ["1", "2"],
-          equipmentType: equipmentType
-        }],
+        // Carriers
+        carriers: resolvedCarriers,
         
-        // Stops - pickup and delivery
-        stops: [
-          {
-            stopType: "PICKUP",
-            stopNumber: 1,
-            date: formattedPickupDate,
-            address: {
-              address1: "Pickup Address",
-              address2: "Suite 100",
-              city: originParts[0] || "Unknown",
-              state: originParts[1] || "Unknown",
-              postal: "12345",
-              country: "USA"
-            }
-          },
-          {
-            stopType: "DELIVERY",
-            stopNumber: 2,
-            date: formattedDeliveryDate,
-            address: {
-              address1: "Delivery Address",
-              address2: "Suite 200",
-              city: destinationParts[0] || "Unknown",
-              state: destinationParts[1] || "Unknown",
-              postal: "54321",
-              country: "USA"
-            }
-          }
-        ]
+        // Stops
+        stops: resolvedStops,
+        
+        // Additional fields
+        loadType: freightDetails.loadTypeId || this.resolveDefaultLoadType(),
+        equipmentType: equipmentType
       }
     };
   }
@@ -521,36 +653,9 @@ class loadsureApiService {
       throw error;
     }
   }
-  
-  /**
-   * Helper method to resolve commodity ID from freight class
-   * @param {String} freightClass - Freight class
-   * @returns {Number} Commodity ID
-   */
-  resolveCommodityIdFromFreightClass(freightClass) {
-    return supportDataService.mapFreightClassToCommodity(freightClass);
-  }
-  
-  /**
-   * Helper method to resolve default load type
-   * @returns {String} Default load type ID
-   */
-  resolveDefaultLoadType() {
-    const loadTypes = supportDataService.getLoadTypes();
-    return loadTypes.length > 0 ? loadTypes[0].id : 'FULL_TRUCKLOAD_1';
-  }
-  
-  /**
-   * Helper method to resolve default equipment type
-   * @returns {Number} Default equipment type ID
-   */
-  resolveDefaultEquipmentType() {
-    const equipmentTypes = supportDataService.getEquipmentTypes();
-    return equipmentTypes.find(et => et.name.toLowerCase().includes('dry van'))?.id || 2;
-  }
 }
 
 // Initialize fetch at module level
 initializeFetch();
 
-module.exports = loadsureApiService;
+module.exports = LoadsureApiService;

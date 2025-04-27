@@ -30,8 +30,31 @@ router.post('/quotes', (req, res) => {
   const freightDetails = req.body;
   const requestId = uuidv4();
   
-  // Basic validation
-  if (!freightDetails.value) {
+  // Basic validation for shipment-based payload
+  if (freightDetails.shipment) {
+    if (!freightDetails.shipment.cargo || !freightDetails.shipment.cargo.cargoValue || !freightDetails.shipment.cargo.cargoValue.value) {
+      return res.status(400).json({
+        error: 'Missing required field: shipment.cargo.cargoValue.value',
+        requestId
+      });
+    }
+    
+    if (!freightDetails.user || !freightDetails.user.email) {
+      return res.status(400).json({
+        error: 'Missing required field: user.email',
+        requestId
+      });
+    }
+    
+    if (!freightDetails.assured || !freightDetails.assured.name) {
+      return res.status(400).json({
+        error: 'Missing required field: assured.name',
+        requestId
+      });
+    }
+  } 
+  // Basic validation for legacy payload
+  else if (!freightDetails.value) {
     return res.status(400).json({
       error: 'Missing required field: value',
       requestId
@@ -108,15 +131,27 @@ router.post('/quotes/simple', (req, res) => {
     userEmail,
     assuredName,
     assuredEmail,
-    callbackUrl
+    callbackUrl,
+    
+    // Support for multiple elements
+    freightClasses,
+    commodities,
+    carriers,
+    stops,
+    
+    // Support for user and assured data
+    user,
+    assured
   } = req.body;
   
   const requestId = uuidv4();
   
   // Basic validation for required fields
-  if (!description || !freightClass || !value || !originCity || !originState || !destinationCity || !destinationState) {
+  if (!description || (!freightClass && !freightClasses) || !value || 
+      (!originCity && !stops) || (!originState && !stops) || 
+      (!destinationCity && !stops) || (!destinationState && !stops)) {
     return res.status(400).json({
-      error: 'Missing required fields. Required: description, freightClass, value, originCity, originState, destinationCity, destinationState',
+      error: 'Missing required fields. Required: description, freightClass/freightClasses, value, origin and destination info (either as individual fields or in stops array)',
       requestId
     });
   }
@@ -150,10 +185,28 @@ router.post('/quotes/simple', (req, res) => {
     carrierEmail,
     carrierPhone,
     carrierDotNumber,
-    userName,
-    userEmail,
-    assuredName,
-    assuredEmail
+    
+    // Support for multiple elements
+    freightClasses,
+    commodities,
+    carriers,
+    stops,
+    
+    // Support for user and assured data
+    user: user || {
+      name: userName,
+      email: userEmail,
+      id: userEmail // Set id to email by default
+    },
+    assured: assured || {
+      name: assuredName,
+      email: assuredEmail,
+      address: req.body.assuredAddress || {
+        city: originCity,
+        state: originState,
+        country: 'USA'
+      }
+    }
   };
   
   // Publish event to RabbitMQ
@@ -261,7 +314,7 @@ router.post('/certificates', async (req, res) => {
     
     try {
       // Create a temporary LoadsureApiService instance for this request
-      const loadsureApiService = require('../services/loadsureApiService');
+      const LoadsureApiService = require('../services/LoadsureApiService');
       const loadsureApi = new LoadsureApiService(
         process.env.LOADSURE_API_KEY || 'MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN',
         process.env.LOADSURE_BASE_URL || 'https://portal.loadsure.net',
