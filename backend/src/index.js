@@ -179,9 +179,36 @@ async function setupConsumers() {
   console.log('RabbitMQ consumers set up');
 }
 
+async function ensureDatabaseSetup() {
+  try {
+    // Import database modules
+    const { testConnection } = await import('../database/index.js');
+    
+    // Test database connection
+    await testConnection();
+    
+    console.log('Database connection verified successfully.');
+  } catch (error) {
+    console.error('Database connection error:', error.message);
+    console.error('Please ensure the database is created properly as specified in the environment variables.');
+    console.error('You may need to create the database manually:');
+    console.error('  1. docker-compose exec postgres psql -U loadsure');
+    console.error('  2. CREATE DATABASE loadsure_dev;');
+    console.error('  3. \\q');
+    console.error('  4. docker-compose restart api-service loadsure-service');
+    
+    // Continue starting the server, other functionality can still work
+    console.log('Continuing server startup without database connection...');
+  }
+}
+
 // Start the server and services
 async function startServer() {
   try {
+    console.log('Ensuring database setup...');
+    // Ensure database setup
+    await ensureDatabaseSetup();
+
     // Initialize support data service
     console.log('Initializing support data service...');
     await supportDataService.initialize();

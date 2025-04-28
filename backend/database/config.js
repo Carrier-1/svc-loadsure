@@ -22,11 +22,11 @@ export default {
     port: process.env.DB_PORT,
     username: process.env.DB_USERNAME,
     password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
+    database: process.env.DB_NAME || 'loadsure_dev', // Ensure this has a default
     logging: false,
     dialectOptions: {
       ssl: {
-        require: true,
+        require: process.env.DB_SSL === 'true',
         rejectUnauthorized: false
       }
     },

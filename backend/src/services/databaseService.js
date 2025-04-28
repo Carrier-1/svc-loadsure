@@ -19,6 +19,16 @@ class DatabaseService {
       console.log('Database synchronized successfully');
     } catch (error) {
       console.error('Failed to synchronize database:', error);
+    
+      // Check if error is due to missing database
+      if (error.message && error.message.includes('database') && error.message.includes('does not exist')) {
+        console.log('Database does not exist. Please create it manually using the following commands:');
+        console.log('  1. Connect to postgres container: docker-compose exec postgres bash');
+        console.log('  2. Login to psql: psql -U loadsure');
+        console.log(`  3. Create database: CREATE DATABASE loadsure_dev;`);
+        console.log('  4. Exit psql and restart the application container');
+      }
+      
       throw error;
     }
   }
