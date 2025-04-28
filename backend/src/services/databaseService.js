@@ -1,7 +1,10 @@
 // backend/src/services/databaseService.js
 import { Op } from 'sequelize';
 import { sequelize, models } from '../../database/index.js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
+const execPromise = promisify(exec);
 const { Quote, Booking, Certificate } = models;
 
 /**
@@ -14,21 +17,28 @@ class DatabaseService {
    */
   static async initialize() {
     try {
-      // Sync models with database
-      await sequelize.sync();
-      console.log('Database synchronized successfully');
-    } catch (error) {
-      console.error('Failed to synchronize database:', error);
-    
-      // Check if error is due to missing database
-      if (error.message && error.message.includes('database') && error.message.includes('does not exist')) {
-        console.log('Database does not exist. Please create it manually using the following commands:');
-        console.log('  1. Connect to postgres container: docker-compose exec postgres bash');
-        console.log('  2. Login to psql: psql -U loadsure');
-        console.log(`  3. Create database: CREATE DATABASE loadsure_dev;`);
-        console.log('  4. Exit psql and restart the application container');
-      }
+      // Test database connection
+      await sequelize.authenticate();
+      console.log('Database connection has been established successfully');
       
+      // Run migrations if needed using Sequelize CLI
+      console.log('Checking and running migrations if needed...');
+      
+      try {
+        const { stdout, stderr } = await execPromise('npx sequelize-cli db:migrate');
+        if (stdout) console.log('Migration output:', stdout);
+        if (stderr) console.error('Migration errors:', stderr);
+        
+        console.log('Migrations completed successfully');
+      } catch (migrationError) {
+        console.error('Migration error:', migrationError.message);
+        if (migrationError.stdout) console.log('Migration output:', migrationError.stdout);
+        if (migrationError.stderr) console.error('Migration errors:', migrationError.stderr);
+        
+        throw new Error(`Failed to run migrations: ${migrationError.message}`);
+      }
+    } catch (error) {
+      console.error('Database initialization error:', error);
       throw error;
     }
   }
@@ -44,7 +54,7 @@ class DatabaseService {
       const { quoteId, requestId, premium, currency, coverageAmount, terms, expiresAt, deductible } = quoteData;
       
       // Check if quote already exists
-      let quote = await Quote.findByQuoteId(quoteId);
+      let quote = await Quote.findOne({ where: { quoteId } });
       
       if (quote) {
         // Update existing quote
@@ -91,7 +101,7 @@ class DatabaseService {
    */
   static async getQuote(quoteId) {
     try {
-      const quote = await Quote.findByQuoteId(quoteId);
+      const quote = await Quote.findOne({ where: { quoteId } });
       if (!quote) {
         throw new Error(`Quote with ID ${quoteId} not found`);
       }
@@ -113,7 +123,7 @@ class DatabaseService {
       const { bookingId, requestId, quoteId, policyNumber, certificateUrl } = bookingData;
       
       // Check if booking already exists
-      let booking = await Booking.findByBookingId(bookingId);
+      let booking = await Booking.findOne({ where: { bookingId } });
       
       if (booking) {
         // Update existing booking
@@ -131,10 +141,13 @@ class DatabaseService {
         let coverageAmount = null;
         
         try {
-          const quote = await Quote.findByQuoteId(quoteId);
+          const quote = await Quote.findOne({ where: { quoteId } });
           if (quote) {
             premium = quote.premium;
             coverageAmount = quote.coverageAmount;
+            
+            // Mark the quote as booked
+            await quote.update({ status: 'booked' });
           }
         } catch (e) {
           console.warn(`Could not find quote data for booking ${bookingId}:`, e);
@@ -180,7 +193,7 @@ class DatabaseService {
    */
   static async getBooking(bookingId) {
     try {
-      const booking = await Booking.findByBookingId(bookingId);
+      const booking = await Booking.findOne({ where: { bookingId } });
       if (!booking) {
         throw new Error(`Booking with ID ${bookingId} not found`);
       }
@@ -205,7 +218,7 @@ class DatabaseService {
       } = certificateData;
       
       // Check if certificate already exists
-      let certificate = await Certificate.findByCertificateNumber(certificateNumber);
+      let certificate = await Certificate.findOne({ where: { certificateNumber } });
       
       if (certificate) {
         // Update existing certificate
@@ -223,7 +236,7 @@ class DatabaseService {
         // Try to find associated booking
         let bookingId = null;
         try {
-          const booking = await Booking.findByPolicyNumber(certificateNumber);
+          const booking = await Booking.findOne({ where: { policyNumber: certificateNumber } });
           if (booking) {
             bookingId = booking.bookingId;
           }
@@ -260,7 +273,7 @@ class DatabaseService {
    */
   static async getCertificate(certificateNumber) {
     try {
-      const certificate = await Certificate.findByCertificateNumber(certificateNumber);
+      const certificate = await Certificate.findOne({ where: { certificateNumber } });
       if (!certificate) {
         throw new Error(`Certificate with number ${certificateNumber} not found`);
       }

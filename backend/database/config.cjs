@@ -1,6 +1,7 @@
 'use strict';
 
 // This file is used by sequelize-cli for migrations
+// CommonJS format is needed for Sequelize CLI
 require('dotenv').config();
 
 module.exports = {

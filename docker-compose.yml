@@ -22,7 +22,9 @@ services:
     environment:
       - POSTGRES_USER=loadsure
       - POSTGRES_PASSWORD=loadsurepass
-      - POSTGRES_DB=loadsure_dev
+      # We use postgres as the default database name
+      # Our application will create loadsure_db via migrations
+      - POSTGRES_DB=postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -30,6 +32,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  db-setup:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - DB_DIALECT=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=loadsure
+      - DB_PASSWORD=loadsurepass
+      - DB_NAME=loadsure_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/usr/src/app
+    command: sh -c "cd /usr/src/app && npx sequelize-cli db:migrate"
+    restart: on-failure
 
   api-service:
     build:
@@ -50,13 +71,13 @@ services:
       - DB_PORT=5432
       - DB_USERNAME=loadsure
       - DB_PASSWORD=loadsurepass
-      - DB_NAME=loadsure_dev
+      - DB_NAME=loadsure_db
     volumes:
       - ./backend/data:/usr/src/app/data
     depends_on:
+      db-setup:
+        condition: service_completed_successfully
       rabbitmq:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
     command: node src/index.js
 
@@ -75,13 +96,13 @@ services:
       - DB_PORT=5432
       - DB_USERNAME=loadsure
       - DB_PASSWORD=loadsurepass
-      - DB_NAME=loadsure_dev
+      - DB_NAME=loadsure_db
     volumes:
       - ./backend/data:/usr/src/app/data
     depends_on:
+      db-setup:
+        condition: service_completed_successfully
       rabbitmq:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
     command: node src/services/loadsureService.js
 

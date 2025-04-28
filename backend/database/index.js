@@ -1,8 +1,11 @@
-// backend/database/index.js - Updated version
+// backend/database/index.js
 import { Sequelize } from 'sequelize';
-import config from './config.js';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 // Get __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -13,56 +16,34 @@ import defineQuoteModel from './models/Quote.js';
 import defineBookingModel from './models/Booking.js';
 import defineCertificateModel from './models/Certificate.js';
 
-// Determine which environment to use
+// Environment settings
 const env = process.env.NODE_ENV || 'development';
-const dbConfig = config[env];
-
-// IMPORTANT FIX: Ensure database name is correctly set to loadsure_dev
-if (!dbConfig.database || dbConfig.database === 'loadsure') {
-  dbConfig.database = 'loadsure_dev';
-  console.log('Database name overridden to loadsure_dev');
-}
+const DB_DIALECT = process.env.DB_DIALECT || 'postgres';
+const DB_HOST = process.env.DB_HOST || 'postgres';
+const DB_PORT = parseInt(process.env.DB_PORT || '5432', 10);
+const DB_USERNAME = process.env.DB_USERNAME || 'loadsure';
+const DB_PASSWORD = process.env.DB_PASSWORD || 'loadsurepass';
+const DB_NAME = process.env.DB_NAME || 'loadsure_db';
 
 // Create Sequelize instance
-const sequelize = new Sequelize(
-  dbConfig.database,
-  dbConfig.username,
-  dbConfig.password,
-  {
-    host: dbConfig.host,
-    port: dbConfig.port,
-    dialect: dbConfig.dialect,
-    logging: dbConfig.logging,
-    dialectOptions: dbConfig.dialectOptions,
-    pool: dbConfig.pool
-  }
-);
-
-// Test database connection
-async function testConnection() {
-  try {
-    await sequelize.authenticate();
-    console.log('Database connection has been established successfully.');
-    return true;
-  } catch (error) {
-    console.error('Unable to connect to the database:', error);
-    
-    // Log helpful message about database not existing
-    if (error.message && error.message.includes('database') && error.message.includes('does not exist')) {
-      console.error(`\n==============================================================`);
-      console.error(`ERROR: Database '${dbConfig.database}' does not exist`);
-      console.error(`\nTo fix this issue, run the following commands:`);
-      console.error(`1. Connect to postgres: docker-compose exec postgres bash`);
-      console.error(`2. Launch psql: psql -U ${dbConfig.username}`);
-      console.error(`3. Create the database: CREATE DATABASE ${dbConfig.database};`);
-      console.error(`4. Exit psql: \\q`);
-      console.error(`5. Restart services: docker-compose restart api-service loadsure-service`);
-      console.error(`==============================================================\n`);
+const sequelize = new Sequelize(DB_NAME, DB_USERNAME, DB_PASSWORD, {
+  host: DB_HOST,
+  port: DB_PORT,
+  dialect: DB_DIALECT,
+  logging: env === 'development' ? console.log : false,
+  dialectOptions: env === 'production' ? {
+    ssl: {
+      require: process.env.DB_SSL === 'true',
+      rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false'
     }
-    
-    return false;
+  } : {},
+  pool: {
+    max: 5,
+    min: 0,
+    acquire: 30000,
+    idle: 10000
   }
-}
+});
 
 // Define models
 const models = {
@@ -77,6 +58,28 @@ Object.keys(models).forEach(modelName => {
     models[modelName].associate(models);
   }
 });
+
+// Test database connection
+async function testConnection() {
+  try {
+    await sequelize.authenticate();
+    console.log('Database connection has been established successfully.');
+    return true;
+  } catch (error) {
+    console.error('Unable to connect to the database:', error);
+    
+    // Log helpful message about database not existing
+    if (error.message && error.message.includes('database') && error.message.includes('does not exist')) {
+      console.error(`\n==============================================================`);
+      console.error(`ERROR: Database '${DB_NAME}' does not exist`);
+      console.error(`\nMake sure the database migrations have been run:`);
+      console.error(`npx sequelize-cli db:migrate`);
+      console.error(`==============================================================\n`);
+    }
+    
+    return false;
+  }
+}
 
 // Export the db object
 export {
