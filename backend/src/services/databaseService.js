@@ -21,21 +21,19 @@ class DatabaseService {
       await sequelize.authenticate();
       console.log('Database connection has been established successfully');
       
-      // Run migrations if needed using Sequelize CLI
-      console.log('Checking and running migrations if needed...');
+      // Skip running migrations in services - they should only be run by db-setup
+      console.log('Migrations should be handled by db-setup service, skipping migration step');
       
+      // Just verify the database tables exist
       try {
-        const { stdout, stderr } = await execPromise('npx sequelize-cli db:migrate');
-        if (stdout) console.log('Migration output:', stdout);
-        if (stderr) console.error('Migration errors:', stderr);
-        
-        console.log('Migrations completed successfully');
-      } catch (migrationError) {
-        console.error('Migration error:', migrationError.message);
-        if (migrationError.stdout) console.log('Migration output:', migrationError.stdout);
-        if (migrationError.stderr) console.error('Migration errors:', migrationError.stderr);
-        
-        throw new Error(`Failed to run migrations: ${migrationError.message}`);
+        await sequelize.query('SELECT * FROM "Quotes" LIMIT 1');
+        await sequelize.query('SELECT * FROM "Bookings" LIMIT 1');
+        await sequelize.query('SELECT * FROM "Certificates" LIMIT 1');
+        console.log('Database tables verification successful');
+      } catch (tableError) {
+        console.warn('Could not verify all required tables exist:', tableError.message);
+        console.warn('Database might not be fully initialized. Check db-setup service logs.');
+        // We'll continue anyway - the db-setup service should eventually complete the setup
       }
     } catch (error) {
       console.error('Database initialization error:', error);

@@ -9,12 +9,12 @@ export default (sequelize) => {
       primaryKey: true
     },
     quoteId: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(1000), // Increased to handle longer values
       allowNull: false,
       comment: 'Quote token from Loadsure API'
     },
     requestId: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(1000), // Increased to handle longer values
       allowNull: true,
       comment: 'Original request ID'
     },
@@ -23,7 +23,7 @@ export default (sequelize) => {
       allowNull: false
     },
     currency: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(10),
       allowNull: false,
       defaultValue: 'USD'
     },
@@ -32,7 +32,7 @@ export default (sequelize) => {
       allowNull: false
     },
     terms: {
-      type: DataTypes.TEXT,
+      type: DataTypes.TEXT, // Changed to TEXT instead of STRING
       allowNull: true
     },
     expiresAt: {

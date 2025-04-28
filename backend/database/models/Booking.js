@@ -9,27 +9,27 @@ export default (sequelize) => {
       primaryKey: true
     },
     bookingId: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(1000), // Increased length
       allowNull: false,
       comment: 'Internal booking ID'
     },
     requestId: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(1000), // Increased length
       allowNull: true,
       comment: 'Original request ID'
     },
     quoteId: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(1000), // Increased length
       allowNull: false,
       comment: 'Quote token from Loadsure API'
     },
     policyNumber: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(1000), // Increased length
       allowNull: false,
       comment: 'Certificate number from Loadsure API'
     },
     certificateUrl: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT, // Increased length for URLs
       allowNull: true,
       comment: 'URL to download certificate PDF'
     },

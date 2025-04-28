@@ -9,22 +9,22 @@ export default (sequelize) => {
       primaryKey: true
     },
     certificateNumber: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(1000), // Increased length
       allowNull: false,
       unique: true,
       comment: 'Certificate number from Loadsure API'
     },
     bookingId: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(1000), // Increased length
       allowNull: true,
       comment: 'Related booking ID'
     },
     productName: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT, // Increased length
       allowNull: true
     },
     productId: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(1000), // Increased length
       allowNull: true
     },
     status: {
@@ -40,7 +40,7 @@ export default (sequelize) => {
       allowNull: true
     },
     certificateLink: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT, // Increased length for URLs
       allowNull: true,
       comment: 'URL to download certificate PDF'
     },
