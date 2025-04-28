@@ -49,7 +49,16 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/usr/src/app
-    command: sh -c "cd /usr/src/app && npx sequelize-cli db:migrate"
+      - ./.sequelizerc:/usr/src/app/.sequelizerc
+    command:     sh -c "
+      cd /usr/src/app &&
+      echo 'Waiting for PostgreSQL to be ready...' &&
+      timeout 30s bash -c 'until pg_isready -h postgres -U loadsure; do sleep 1; done' &&
+      echo 'Creating database if it does not exist...' &&
+      node scripts/create-database.js &&
+      echo 'Running migrations...' &&
+      npx sequelize-cli db:migrate &&
+      echo 'Database setup completed!'"
     restart: on-failure
 
   api-service:
