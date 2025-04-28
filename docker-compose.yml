@@ -27,12 +27,23 @@ services:
       - POSTGRES_DB=postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    command: >
+      sh -c "
+        echo 'Starting PostgreSQL...' &&
+        docker-entrypoint.sh postgres &
+        sleep 10 &&
+        echo 'Creating databases...' &&
+        psql -U loadsure -d postgres -c 'CREATE DATABASE loadsure;' &&
+        psql -U loadsure -d postgres -c 'CREATE DATABASE loadsure_db;' &&
+        wait
+      "
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U loadsure"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+ 
   db-setup:
     build:
       context: ./backend
@@ -43,22 +54,18 @@ services:
       - DB_PORT=5432
       - DB_USERNAME=loadsure
       - DB_PASSWORD=loadsurepass
-      - DB_NAME=loadsure_db
+      - DB_NAME=loadsure
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./backend:/usr/src/app
-      - ./.sequelizerc:/usr/src/app/.sequelizerc
-    command:     sh -c "
-      cd /usr/src/app &&
-      echo 'Waiting for PostgreSQL to be ready...' &&
-      timeout 30s bash -c 'until pg_isready -h postgres -U loadsure; do sleep 1; done' &&
-      echo 'Creating database if it does not exist...' &&
-      node scripts/create-database.js &&
-      echo 'Running migrations...' &&
-      npx sequelize-cli db:migrate &&
-      echo 'Database setup completed!'"
+    working_dir: /usr/src/app
+    command: >
+      sh -c "
+        echo 'Waiting for database to be ready...' &&
+        node scripts/run-migrations.js
+      "
     restart: on-failure
 
   api-service:
@@ -80,7 +87,7 @@ services:
       - DB_PORT=5432
       - DB_USERNAME=loadsure
       - DB_PASSWORD=loadsurepass
-      - DB_NAME=loadsure_db
+      - DB_NAME=loadsure
     volumes:
       - ./backend/data:/usr/src/app/data
     depends_on:
@@ -105,7 +112,7 @@ services:
       - DB_PORT=5432
       - DB_USERNAME=loadsure
       - DB_PASSWORD=loadsurepass
-      - DB_NAME=loadsure_db
+      - DB_NAME=loadsure
     volumes:
       - ./backend/data:/usr/src/app/data
     depends_on:

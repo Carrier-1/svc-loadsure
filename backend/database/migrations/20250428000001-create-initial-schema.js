@@ -1,7 +1,6 @@
-'use strict';
+// Using ES Module syntax for Sequelize migrations
 
-/** @type {import('sequelize-cli').Migration} */
-module.exports = {
+export default {
   async up(queryInterface, Sequelize) {
     // Create Quotes table
     await queryInterface.createTable('Quotes', {
