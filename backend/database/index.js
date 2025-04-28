@@ -3,6 +3,7 @@ import { Sequelize } from 'sequelize';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import dotenv from 'dotenv';
+import config from './config.js';
 
 // Load environment variables
 dotenv.config();
@@ -16,34 +17,20 @@ import defineQuoteModel from './models/Quote.js';
 import defineBookingModel from './models/Booking.js';
 import defineCertificateModel from './models/Certificate.js';
 
-// Environment settings
-const env = process.env.NODE_ENV || 'development';
-const DB_DIALECT = process.env.DB_DIALECT || 'postgres';
-const DB_HOST = process.env.DB_HOST || 'postgres';
-const DB_PORT = parseInt(process.env.DB_PORT || '5432', 10);
-const DB_USERNAME = process.env.DB_USERNAME || 'loadsure';
-const DB_PASSWORD = process.env.DB_PASSWORD || 'loadsurepass';
-const DB_NAME = process.env.DB_NAME || 'loadsure_db';
-
 // Create Sequelize instance
-const sequelize = new Sequelize(DB_NAME, DB_USERNAME, DB_PASSWORD, {
-  host: DB_HOST,
-  port: DB_PORT,
-  dialect: DB_DIALECT,
-  logging: env === 'development' ? console.log : false,
-  dialectOptions: env === 'production' ? {
-    ssl: {
-      require: process.env.DB_SSL === 'true',
-      rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false'
-    }
-  } : {},
-  pool: {
-    max: 5,
-    min: 0,
-    acquire: 30000,
-    idle: 10000
+const sequelize = new Sequelize(
+  config.database, 
+  config.username, 
+  config.password, 
+  {
+    host: config.host,
+    port: config.port,
+    dialect: config.dialect,
+    logging: config.logging,
+    dialectOptions: config.dialectOptions,
+    pool: config.pool
   }
-});
+);
 
 // Define models
 const models = {
@@ -71,9 +58,8 @@ async function testConnection() {
     // Log helpful message about database not existing
     if (error.message && error.message.includes('database') && error.message.includes('does not exist')) {
       console.error(`\n==============================================================`);
-      console.error(`ERROR: Database '${DB_NAME}' does not exist`);
-      console.error(`\nMake sure the database migrations have been run:`);
-      console.error(`npx sequelize-cli db:migrate`);
+      console.error(`ERROR: Database '${config.database}' does not exist`);
+      console.error(`\nMake sure the database has been created.`);
       console.error(`==============================================================\n`);
     }
     

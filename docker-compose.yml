@@ -22,27 +22,15 @@ services:
     environment:
       - POSTGRES_USER=loadsure
       - POSTGRES_PASSWORD=loadsurepass
-      # We use postgres as the default database name
-      # Our application will create loadsure_db via migrations
-      - POSTGRES_DB=postgres
+      - POSTGRES_DB=loadsure
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    command: >
-      sh -c "
-        echo 'Starting PostgreSQL...' &&
-        docker-entrypoint.sh postgres &
-        sleep 10 &&
-        echo 'Creating databases...' &&
-        psql -U loadsure -d postgres -c 'CREATE DATABASE loadsure;' &&
-        psql -U loadsure -d postgres -c 'CREATE DATABASE loadsure_db;' &&
-        wait
-      "
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U loadsure"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U loadsure -d loadsure"]
+      interval: 5s
       timeout: 5s
-      retries: 5
-
+      retries: 10
+      start_period: 10s
  
   db-setup:
     build:
@@ -63,10 +51,16 @@ services:
     working_dir: /usr/src/app
     command: >
       sh -c "
-        echo 'Waiting for database to be ready...' &&
-        node scripts/run-migrations.js
+        echo 'Running database migrations...' &&
+        npm run migrate
       "
     restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /usr/src/app/.migration-complete || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   api-service:
     build:
@@ -92,10 +86,16 @@ services:
       - ./backend/data:/usr/src/app/data
     depends_on:
       db-setup:
-        condition: service_completed_successfully
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     command: node src/index.js
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/support-data/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   loadsure-service:
     build:
@@ -116,8 +116,8 @@ services:
     volumes:
       - ./backend/data:/usr/src/app/data
     depends_on:
-      db-setup:
-        condition: service_completed_successfully
+      api-service:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     command: node src/services/loadsureService.js

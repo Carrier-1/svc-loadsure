@@ -4,18 +4,23 @@
 // CommonJS format is needed for Sequelize CLI
 require('dotenv').config();
 
+// Common configuration
+const baseConfig = {
+  dialect: process.env.DB_DIALECT || 'postgres',
+  host: process.env.DB_HOST || 'postgres',
+  port: parseInt(process.env.DB_PORT || '5432', 10),
+  username: process.env.DB_USERNAME || 'loadsure',
+  password: process.env.DB_PASSWORD || 'loadsurepass',
+  database: process.env.DB_NAME || 'loadsure',
+  migrationStorageTableName: 'sequelize_migrations',
+  seederStorageTableName: 'sequelize_seeders',
+  seederStorage: 'sequelize',
+};
+
 module.exports = {
   development: {
-    dialect: process.env.DB_DIALECT || 'postgres',
-    host: process.env.DB_HOST || 'postgres',
-    port: parseInt(process.env.DB_PORT || '5432', 10),
-    username: process.env.DB_USERNAME || 'loadsure',
-    password: process.env.DB_PASSWORD || 'loadsurepass',
-    database: process.env.DB_NAME || 'loadsure_db',
+    ...baseConfig,
     logging: console.log,
-    seederStorage: 'sequelize',
-    migrationStorageTableName: 'sequelize_migrations',
-    seederStorageTableName: 'sequelize_seeders'
   },
   test: {
     dialect: 'sqlite',
@@ -25,15 +30,8 @@ module.exports = {
     seederStorageTableName: 'sequelize_seeders'
   },
   production: {
-    dialect: process.env.DB_DIALECT || 'postgres',
-    host: process.env.DB_HOST,
-    port: parseInt(process.env.DB_PORT || '5432', 10),
-    username: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME || 'loadsure_db',
+    ...baseConfig,
     logging: false,
-    migrationStorageTableName: 'sequelize_migrations',
-    seederStorageTableName: 'sequelize_seeders',
     dialectOptions: {
       ssl: {
         require: process.env.DB_SSL === 'true',

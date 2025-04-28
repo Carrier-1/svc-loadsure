@@ -1,6 +1,12 @@
+// backend/database/migrations/20250428000001-create-initial-schema.js
 // Using ES Module syntax for Sequelize migrations
 
-export default {
+/**
+ * Migration to create the initial database schema for the Loadsure integration
+ * This creates Quote, Booking, and Certificate tables with all required fields and relationships
+ */
+
+const migration = {
   async up(queryInterface, Sequelize) {
     // Create Quotes table
     await queryInterface.createTable('Quotes', {
@@ -46,11 +52,13 @@ export default {
         allowNull: true,
         defaultValue: 0
       },
+      // Original request data stored in this column
       requestData: {
         type: Sequelize.JSONB,
         allowNull: true,
         comment: 'Original freight details from the quote request'
       },
+      // API response data stored in this column
       responseData: {
         type: Sequelize.JSONB,
         allowNull: true,
@@ -65,6 +73,7 @@ export default {
         allowNull: true,
         comment: 'Additional metadata about the quote'
       },
+      // Timestamps
       createdAt: {
         type: Sequelize.DATE,
         allowNull: false
@@ -140,6 +149,7 @@ export default {
         allowNull: true,
         comment: 'Additional metadata'
       },
+      // Timestamps
       createdAt: {
         type: Sequelize.DATE,
         allowNull: false
@@ -215,6 +225,7 @@ export default {
         allowNull: true,
         comment: 'Complete response from Loadsure API'
       },
+      // Timestamps
       createdAt: {
         type: Sequelize.DATE,
         allowNull: false
@@ -229,7 +240,7 @@ export default {
       }
     });
 
-    // Create indexes
+    // Create indexes for better query performance
     await queryInterface.addIndex('Quotes', ['quoteId'], { unique: true });
     await queryInterface.addIndex('Quotes', ['requestId']);
     await queryInterface.addIndex('Quotes', ['expiresAt']);
@@ -252,3 +263,5 @@ export default {
     await queryInterface.dropTable('Quotes');
   }
 };
+
+export default migration;
