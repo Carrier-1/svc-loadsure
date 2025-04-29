@@ -1,97 +1,4 @@
-<style scoped>
-.insurance-form-container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 0 15px;
-}
-
-.error-message {
-  background-color: #fff3f3;
-  border-left: 4px solid #f44336;
-  padding: 15px;
-  margin-bottom: 20px;
-  border-radius: 4px;
-}
-
-.error-message p {
-  margin: 0 0 10px 0;
-  color: #d32f2f;
-}
-
-.refresh-btn {
-  background-color: #f44336;
-  color: white;
-  padding: 5px 10px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.refresh-btn:hover {
-  background-color: #d32f2f;
-}
-
-.form-actions {
-  margin-top: 30px;
-  text-align: center;
-}
-
-.submit-btn {
-  background-color: #4a6cf7;
-  color: white;
-  padding: 12px 30px;
-  border: none;
-  border-radius: 4px;
-  font-size: 16px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  font-weight: 500;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.submit-btn:hover:not(:disabled) {
-  background-color: #3a5bd9;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-.submit-btn:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 40px;
-}
-
-.spinner {
-  border: 4px solid rgba(0, 0, 0, 0.1);
-  border-radius: 50%;
-  border-top: 4px solid #4a6cf7;
-  width: 40px;
-  height: 40px;
-  animation: spin 1s linear infinite;
-  margin-bottom: 15px;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.last-updated-info {
-  text-align: right;
-  font-size: 12px;
-  color: #777;
-  margin-top: 20px;
-  padding-top: 10px;
-  border-top: 1px solid #eee;
-}
-</style><template>
+<template>
   <div class="insurance-form-container">
     <!-- Error Message -->
     <div v-if="supportDataError || apiError" class="error-message">
@@ -1297,3 +1204,98 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+.insurance-form-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 15px;
+}
+
+.error-message {
+  background-color: #fff3f3;
+  border-left: 4px solid #f44336;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+}
+
+.error-message p {
+  margin: 0 0 10px 0;
+  color: #d32f2f;
+}
+
+.refresh-btn {
+  background-color: #f44336;
+  color: white;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.refresh-btn:hover {
+  background-color: #d32f2f;
+}
+
+.form-actions {
+  margin-top: 30px;
+  text-align: center;
+}
+
+.submit-btn {
+  background-color: #4a6cf7;
+  color: white;
+  padding: 12px 30px;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.submit-btn:hover:not(:disabled) {
+  background-color: #3a5bd9;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.submit-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px;
+}
+
+.spinner {
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-top: 4px solid #4a6cf7;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 15px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.last-updated-info {
+  text-align: right;
+  font-size: 12px;
+  color: #777;
+  margin-top: 20px;
+  padding-top: 10px;
+  border-top: 1px solid #eee;
+}
+</style>
