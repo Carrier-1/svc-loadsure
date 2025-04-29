@@ -49,8 +49,22 @@ class DatabaseService {
    */
   static async saveQuote(quoteData, requestData) {
     try {
-      const { quoteId, requestId, premium, currency, coverageAmount, terms, expiresAt, deductible } = quoteData;
-      
+      const { quoteId, requestId, premium, currency, coverageAmount, terms, expiresAt, deductible, integrationFeeType, integrationFeeValue } = quoteData;
+
+      // Calculate integration fee amount
+      let integrationFeeAmount = null;
+      if (integrationFeeType && integrationFeeValue && premium) {
+        if (integrationFeeType === 'percentage') {
+          // For percentage, multiply premium by the percentage value
+          integrationFeeAmount = parseFloat(premium) * parseFloat(integrationFeeValue);
+        } else if (integrationFeeType === 'fixed') {
+          // For fixed amount, just use the value directly
+          integrationFeeAmount = parseFloat(integrationFeeValue);
+        }
+        // Round to 2 decimal places
+        integrationFeeAmount = parseFloat(integrationFeeAmount).toFixed(2);
+      }
+
       // Check if quote already exists
       let quote = await Quote.findOne({ where: { quoteId } });
       
@@ -64,6 +78,9 @@ class DatabaseService {
           terms,
           expiresAt,
           deductible,
+          integrationFeeType,
+          integrationFeeValue,
+          integrationFeeAmount,
           requestData,
           responseData: quoteData,
           status: new Date() > new Date(expiresAt) ? 'expired' : 'active'
@@ -79,6 +96,9 @@ class DatabaseService {
           terms,
           expiresAt,
           deductible,
+          integrationFeeType,
+          integrationFeeValue,
+          integrationFeeAmount,
           requestData,
           responseData: quoteData,
           status: new Date() > new Date(expiresAt) ? 'expired' : 'active'
@@ -91,6 +111,7 @@ class DatabaseService {
       throw error;
     }
   }
+
 
   /**
    * Get a quote by its ID

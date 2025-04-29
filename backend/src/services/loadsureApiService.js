@@ -77,11 +77,11 @@ class LoadsureApiService {
     return equipmentTypes.find(et => et.name.toLowerCase().includes('dry van'))?.id || 2;
   }
 
-  /**
-   * Get a quote from Loadsure API using a complete freightDetails object
-   * @param {Object} freightDetails - Freight details
-   * @returns {Promise<Object>} Quote details
-   */
+/**
+ * Get a quote from Loadsure API using a complete freightDetails object
+ * @param {Object} freightDetails - Freight details
+ * @returns {Promise<Object>} Quote details
+ */
   async getQuote(freightDetails) {
     console.log('Getting quote from Loadsure API');
     
@@ -94,6 +94,12 @@ class LoadsureApiService {
     }
     
     try {
+      // Extract integration fee details if present
+      const integrationFeeType = freightDetails.integrationFeeType || 
+                                (freightDetails.shipment && freightDetails.shipment.integrationFeeType);
+      const integrationFeeValue = freightDetails.integrationFeeValue || 
+                                (freightDetails.shipment && freightDetails.shipment.integrationFeeValue);
+      
       // Check if this is a complete payload or needs transformation
       let payload = freightDetails.shipment ? 
         freightDetails : // If it already has a shipment property, it's in the correct format
@@ -140,7 +146,10 @@ class LoadsureApiService {
         coverageAmount: data.insuranceProduct.limit,
         terms: data.insuranceProduct.description,
         expiresAt: this.calculateExpiryDate(data.expiresIn),
-        deductible: data.insuranceProduct.deductible
+        deductible: data.insuranceProduct.deductible,
+        // Add integration fee details to the response
+        integrationFeeType: integrationFeeType,
+        integrationFeeValue: integrationFeeValue
       };
     } catch (error) {
       console.error('Error getting quote from Loadsure API:', error);
@@ -149,12 +158,12 @@ class LoadsureApiService {
   }
   
   /**
-   * Get a quote from Loadsure API using primitive values
-   * This provides a simpler interface for clients that don't want to build the complete object
-   * 
-   * @param {Object} params - Object containing primitive values for freight details
-   * @returns {Promise<Object>} Quote details
-   */
+ * Get a quote from Loadsure API using primitive values
+ * This provides a simpler interface for clients that don't want to build the complete object
+ * 
+ * @param {Object} params - Object containing primitive values for freight details
+ * @returns {Promise<Object>} Quote details
+ */
   async getQuoteFromPrimitives({
     // Required fields
     description,
@@ -195,7 +204,11 @@ class LoadsureApiService {
     freightClasses = null,
     commodities = null,
     carriers = null,
-    stops = null
+    stops = null,
+    
+    // Integration fee fields
+    integrationFeeType = null,
+    integrationFeeValue = null
   }) {
     // Default dates if not provided
     const today = new Date();
@@ -343,7 +356,11 @@ class LoadsureApiService {
         carriers: resolvedCarriers,
         stops: resolvedStops,
         loadType: loadTypeId || defaultLoadType,
-        equipmentType: equipmentTypeId || defaultEquipmentTypeId
+        equipmentType: equipmentTypeId || defaultEquipmentTypeId,
+        
+        // Add integration fee fields if provided
+        integrationFeeType,
+        integrationFeeValue
       }
     };
     

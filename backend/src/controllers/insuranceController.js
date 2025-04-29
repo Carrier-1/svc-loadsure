@@ -93,6 +93,79 @@ router.post('/quotes', (req, res) => {
 });
 
 /**
+ * Updates to existing consumer for quote received events
+ * This is in setupConsumers() function
+ */
+async function setupConsumers() {
+  // Consumer for quote received events
+  await channel.consume(config.QUEUE_QUOTE_RECEIVED, (msg) => {
+    if (msg !== null) {
+      try {
+        const data = JSON.parse(msg.content.toString());
+        const { requestId } = data;
+        
+        // Check if response indicates an error
+        if (data.error) {
+          console.error(`Error in quote response for request ${requestId}:`, data.error);
+          
+          const res = pendingRequests.get(requestId);
+          if (res) {
+            res.status(400).json({
+              error: data.error,
+              requestId
+            });
+            pendingRequests.delete(requestId);
+          }
+          
+          channel.ack(msg);
+          return;
+        }
+        
+        console.log(`Quote received for request ${requestId}, quote ID: ${data.quoteId}`);
+        
+        // Store quote for potential future booking
+        quotes.set(data.quoteId, data);
+        
+        // Calculate total with integration fee
+        let totalCost = parseFloat(data.premium || 0);
+        if (data.integrationFeeAmount) {
+          totalCost += parseFloat(data.integrationFeeAmount);
+        }
+        
+        // Send response back to client
+        const res = pendingRequests.get(requestId);
+        if (res) {
+          res.json({
+            status: 'success',
+            quote: {
+              quoteId: data.quoteId,
+              premium: data.premium,
+              currency: data.currency,
+              coverageAmount: data.coverageAmount,
+              terms: data.terms,
+              expiresAt: data.expiresAt,
+              deductible: data.deductible || 0,
+              integrationFeeType: data.integrationFeeType,
+              integrationFeeValue: data.integrationFeeValue,
+              integrationFeeAmount: data.integrationFeeAmount,
+              totalCost: totalCost.toFixed(2)
+            }
+          });
+          pendingRequests.delete(requestId);
+        }
+        
+        // Acknowledge the message
+        channel.ack(msg);
+      } catch (error) {
+        console.error('Error processing quote received message:', error);
+        // Negative acknowledge and requeue the message
+        channel.nack(msg, false, true);
+      }
+    }
+  });
+}
+
+/**
  * @route POST /api/insurance/quotes/simple
  * @desc Get insurance quote using primitive values
  * @access Public
@@ -397,6 +470,13 @@ router.get('/quotes/:id', async (req, res) => {
   try {
     // Only use database lookup for GET requests
     const quote = await DatabaseService.getQuote(req.params.id);
+    
+    // Calculate total with integration fee
+    let totalCost = parseFloat(quote.premium || 0);
+    if (quote.integrationFeeAmount) {
+      totalCost += parseFloat(quote.integrationFeeAmount);
+    }
+    
     res.json({
       status: 'success',
       quote: {
@@ -407,7 +487,11 @@ router.get('/quotes/:id', async (req, res) => {
         terms: quote.terms,
         expiresAt: quote.expiresAt,
         status: quote.status,
-        deductible: quote.deductible || 0
+        deductible: quote.deductible || 0,
+        integrationFeeType: quote.integrationFeeType,
+        integrationFeeValue: quote.integrationFeeValue,
+        integrationFeeAmount: quote.integrationFeeAmount,
+        totalCost: totalCost.toFixed(2)
       }
     });
   } catch (error) {

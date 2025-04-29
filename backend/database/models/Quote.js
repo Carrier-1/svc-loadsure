@@ -44,6 +44,22 @@ export default (sequelize) => {
       allowNull: true,
       defaultValue: 0
     },
+    // New fields for integration fee
+    integrationFeeType: {
+      type: DataTypes.ENUM('percentage', 'fixed'),
+      allowNull: true,
+      comment: 'Type of integration fee: percentage or fixed amount'
+    },
+    integrationFeeValue: {
+      type: DataTypes.DECIMAL(10, 4),
+      allowNull: true,
+      comment: 'Value of integration fee (percentage multiplier or fixed amount)'
+    },
+    integrationFeeAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      comment: 'Calculated integration fee amount'
+    },
     // Original request data stored in this column
     requestData: {
       type: DataTypes.JSONB,
@@ -106,6 +122,19 @@ export default (sequelize) => {
     // Set expiration status if needed
     if (quote.expiresAt < new Date()) {
       quote.status = 'expired';
+    }
+
+    // Calculate integration fee amount if not already calculated
+    if (quote.integrationFeeType && quote.integrationFeeValue && quote.premium && !quote.integrationFeeAmount) {
+      if (quote.integrationFeeType === 'percentage') {
+        // For percentage, multiply premium by the percentage value
+        quote.integrationFeeAmount = parseFloat(quote.premium) * parseFloat(quote.integrationFeeValue);
+      } else if (quote.integrationFeeType === 'fixed') {
+        // For fixed amount, just use the value directly
+        quote.integrationFeeAmount = parseFloat(quote.integrationFeeValue);
+      }
+      // Round to 2 decimal places
+      quote.integrationFeeAmount = parseFloat(quote.integrationFeeAmount).toFixed(2);
     }
   });
 
