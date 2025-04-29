@@ -1,12 +1,11 @@
-// backend/database/migrations/20250428000001-create-initial-schema.js
-// Using ES Module syntax for Sequelize migrations
+'use strict';
 
 /**
  * Migration to create the initial database schema for the Loadsure integration
  * This creates Quote, Booking, and Certificate tables with all required fields and relationships
  */
 
-const migration = {
+module.exports = {
   async up(queryInterface, Sequelize) {
     // Create Quotes table
     await queryInterface.createTable('Quotes', {
@@ -263,5 +262,3 @@ const migration = {
     await queryInterface.dropTable('Quotes');
   }
 };
-
-export default migration;

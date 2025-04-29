@@ -9,6 +9,7 @@
     "service": "node src/services/loadsureService.js",
     "test": "jest",
     "migrate": "node scripts/run-migrations.js",
+    "migrate:check": "node scripts/check-migrations.cjs",
     "migrate:status": "npx sequelize-cli db:migrate:status",
     "migrate:undo": "npx sequelize-cli db:migrate:undo",
     "seed": "npx sequelize-cli db:seed:all",

@@ -31,35 +31,31 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
- 
+
   db-setup:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    environment:
-      - DB_DIALECT=postgres
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USERNAME=loadsure
-      - DB_PASSWORD=loadsurepass
-      - DB_NAME=loadsure
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - ./backend:/usr/src/app
-    working_dir: /usr/src/app
-    # Modified command to create migration file and ensure proper exit code
-    command: >
-      sh -c "
-        echo 'Running database migrations...' &&
-        npm run migrate || exit 1 &&
-        touch /usr/src/app/.migration-complete &&
-        echo 'Migrations completed successfully!' &&
-        exit 0
-      "
-    # One-shot service that exits when done
-    restart: "no"
+      build:
+        context: ./backend
+        dockerfile: Dockerfile
+      environment:
+        - DB_DIALECT=postgres
+        - DB_HOST=postgres
+        - DB_PORT=5432
+        - DB_USERNAME=loadsure
+        - DB_PASSWORD=loadsurepass
+        - DB_NAME=loadsure
+      depends_on:
+        postgres:
+          condition: service_healthy
+      volumes:
+        - ./backend:/usr/src/app
+      working_dir: /usr/src/app
+      command: >
+        sh -c "
+          echo 'Running database migrations...' &&
+          npx sequelize-cli db:migrate &&
+          echo 'Migrations completed successfully!'
+        "
+      restart: "no"
 
   api-service:
     build:
@@ -139,3 +135,5 @@ services:
 volumes:
   rabbitmq_data:
   postgres_data:
+    name: loadsure_postgres_data
+    external: false

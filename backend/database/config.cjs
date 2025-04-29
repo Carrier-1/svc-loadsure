@@ -12,6 +12,7 @@ const baseConfig = {
   username: process.env.DB_USERNAME || 'loadsure',
   password: process.env.DB_PASSWORD || 'loadsurepass',
   database: process.env.DB_NAME || 'loadsure',
+  // Use sequelize_migrations table instead of SequelizeMeta
   migrationStorageTableName: 'sequelize_migrations',
   seederStorageTableName: 'sequelize_seeders',
   seederStorage: 'sequelize',
