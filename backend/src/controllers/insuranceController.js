@@ -2,6 +2,22 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import DatabaseService from '../services/databaseService.js';
+import { Op } from 'sequelize';
+
+// Import models directly
+let Quote, Booking, Certificate;
+
+// We'll import these when the controller is initialized
+const importModels = async () => {
+  try {
+    const { models } = await import('../../database/index.js');
+    Quote = models.Quote;
+    Booking = models.Booking;
+    Certificate = models.Certificate;
+  } catch (error) {
+    console.error('Error importing models:', error);
+  }
+};
 
 const router = express.Router();
 
@@ -17,7 +33,92 @@ let channel;
 function initialize(dependencies) {
   pendingRequests = dependencies.pendingRequests;
   channel = dependencies.channel;
+  
+  // Import models
+  importModels().catch(console.error);
 }
+
+/**
+ * @swagger
+ * /insurance/quotes/list:
+ *   get:
+ *     summary: Get a list of all quotes
+ *     description: Returns a paginated list of all quotes
+ *     tags: [Insurance Quotes]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Number of items per page
+ *     responses:
+ *       200:
+ *         description: List of quotes successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/QuoteListResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get('/quotes/list', async (req, res) => {
+  try {
+    // Get quotes from database with pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    
+    // Make sure Quote model is available
+    if (!Quote) {
+      const { models } = await import('../../database/index.js');
+      Quote = models.Quote;
+    }
+    
+    const { count, rows } = await Quote.findAndCountAll({
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+      paranoid: true // Exclude soft-deleted records
+    });
+    
+    // Format the response
+    const quotes = rows.map(quote => {
+      const formattedQuote = quote.toJSON();
+      
+      // Add any additional formatting or calculated fields
+      return formattedQuote;
+    });
+    
+    res.json({
+      status: 'success',
+      quotes,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        pages: Math.ceil(count / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching quotes list:', error);
+    res.status(500).json({
+      status: 'error',
+      error: 'Failed to fetch quotes',
+      message: error.message
+    });
+  }
+});
 
 /**
  * @swagger
@@ -311,6 +412,77 @@ router.post('/quotes/simple', (req, res) => {
 
 /**
  * @swagger
+ * /insurance/quotes/{id}:
+ *   get:
+ *     summary: Get quote details by ID
+ *     description: Retrieves details for a specific insurance quote
+ *     tags: [Insurance Quotes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Quote ID to retrieve
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Quote details successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/QuoteResponse'
+ *       404:
+ *         description: Quote not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get('/quotes/:id', async (req, res) => {
+  try {
+    // Only use database lookup for GET requests
+    const quote = await DatabaseService.getQuote(req.params.id);
+    
+    // Calculate total with integration fee
+    let totalCost = parseFloat(quote.premium || 0);
+    if (quote.integrationFeeAmount) {
+      totalCost += parseFloat(quote.integrationFeeAmount);
+    }
+    
+    res.json({
+      status: 'success',
+      quote: {
+        quoteId: quote.quoteId,
+        premium: quote.premium,
+        currency: quote.currency,
+        coverageAmount: quote.coverageAmount,
+        terms: quote.terms,
+        expiresAt: quote.expiresAt,
+        status: quote.status,
+        deductible: quote.deductible || 0,
+        integrationFeeType: quote.integrationFeeType,
+        integrationFeeValue: quote.integrationFeeValue,
+        integrationFeeAmount: quote.integrationFeeAmount,
+        totalCost: totalCost.toFixed(2)
+      }
+    });
+  } catch (error) {
+    res.status(404).json({
+      status: 'error',
+      error: 'Quote not found',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
  * /insurance/bookings:
  *   post:
  *     summary: Book insurance for a quote
@@ -424,6 +596,101 @@ router.post('/bookings', async (req, res) => {
 
 /**
  * @swagger
+ * /insurance/certificates/list:
+ *   get:
+ *     summary: Get a list of all certificates
+ *     description: Returns a paginated list of all certificates
+ *     tags: [Certificates]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Number of items per page
+ *     responses:
+ *       200:
+ *         description: List of certificates successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CertificateListResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get('/certificates/list', async (req, res) => {
+  try {
+    // Make sure Certificate model is available
+    if (!Certificate) {
+      const { models } = await import('../../database/index.js');
+      Certificate = models.Certificate;
+    }
+    
+    // Get certificates from database with pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    
+    const { count, rows } = await Certificate.findAndCountAll({
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+      paranoid: true // Exclude soft-deleted records
+    });
+    
+    // Format the response
+    const certificates = rows.map(certificate => {
+      const formattedCertificate = certificate.toJSON();
+      
+      // Add any additional formatting or calculated fields
+      // Check if certificate is still valid based on dates
+      if (formattedCertificate.validFrom && formattedCertificate.validTo) {
+        const now = new Date();
+        const validFrom = new Date(formattedCertificate.validFrom);
+        const validTo = new Date(formattedCertificate.validTo);
+        
+        if (now < validFrom) {
+          formattedCertificate.status = 'PENDING';
+        } else if (now > validTo) {
+          formattedCertificate.status = 'EXPIRED';
+        }
+      }
+      
+      return formattedCertificate;
+    });
+    
+    res.json({
+      status: 'success',
+      certificates,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        pages: Math.ceil(count / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching certificates list:', error);
+    res.status(500).json({
+      status: 'error',
+      error: 'Failed to fetch certificates',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
  * /insurance/certificates:
  *   post:
  *     summary: Get certificate details by number
@@ -530,27 +797,27 @@ router.post('/certificates', async (req, res) => {
 
 /**
  * @swagger
- * /insurance/quotes/{id}:
+ * /insurance/certificates/{number}:
  *   get:
- *     summary: Get quote details by ID
- *     description: Retrieves details for a specific insurance quote
- *     tags: [Insurance Quotes]
+ *     summary: Get certificate details by number
+ *     description: Retrieves details for a specific insurance certificate
+ *     tags: [Certificates]
  *     parameters:
  *       - in: path
- *         name: id
+ *         name: number
  *         required: true
- *         description: Quote ID to retrieve
+ *         description: Certificate number to retrieve
  *         schema:
  *           type: string
  *     responses:
  *       200:
- *         description: Quote details successfully retrieved
+ *         description: Certificate details successfully retrieved
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/QuoteResponse'
+ *               $ref: '#/components/schemas/CertificateResponse'
  *       404:
- *         description: Quote not found
+ *         description: Certificate not found
  *         content:
  *           application/json:
  *             schema:
@@ -562,38 +829,113 @@ router.post('/certificates', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/quotes/:id', async (req, res) => {
+router.get('/certificates/:number', async (req, res) => {
   try {
     // Only use database lookup for GET requests
-    const quote = await DatabaseService.getQuote(req.params.id);
-    
-    // Calculate total with integration fee
-    let totalCost = parseFloat(quote.premium || 0);
-    if (quote.integrationFeeAmount) {
-      totalCost += parseFloat(quote.integrationFeeAmount);
-    }
-    
+    const certificate = await DatabaseService.getCertificate(req.params.number);
     res.json({
       status: 'success',
-      quote: {
-        quoteId: quote.quoteId,
-        premium: quote.premium,
-        currency: quote.currency,
-        coverageAmount: quote.coverageAmount,
-        terms: quote.terms,
-        expiresAt: quote.expiresAt,
-        status: quote.status,
-        deductible: quote.deductible || 0,
-        integrationFeeType: quote.integrationFeeType,
-        integrationFeeValue: quote.integrationFeeValue,
-        integrationFeeAmount: quote.integrationFeeAmount,
-        totalCost: totalCost.toFixed(2)
+      certificate: {
+        certificateNumber: certificate.certificateNumber,
+        productName: certificate.productName,
+        productId: certificate.productId,
+        status: certificate.status,
+        coverageAmount: certificate.coverageAmount,
+        premium: certificate.premium,
+        certificateLink: certificate.certificateLink,
+        validFrom: certificate.validFrom,
+        validTo: certificate.validTo
       }
     });
   } catch (error) {
     res.status(404).json({
       status: 'error',
-      error: 'Quote not found',
+      error: 'Certificate not found',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /insurance/bookings/list:
+ *   get:
+ *     summary: Get a list of all bookings
+ *     description: Returns a paginated list of all bookings
+ *     tags: [Insurance Bookings]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Number of items per page
+ *     responses:
+ *       200:
+ *         description: List of bookings successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/BookingListResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get('/bookings/list', async (req, res) => {
+  try {
+    // Make sure Booking and Certificate models are available
+    if (!Booking || !Certificate) {
+      const { models } = await import('../../database/index.js');
+      Booking = models.Booking;
+      Certificate = models.Certificate;
+    }
+    
+    // Get bookings from database with pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    
+    const { count, rows } = await Booking.findAndCountAll({
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+      paranoid: true, // Exclude soft-deleted records
+      include: [
+        {
+          model: Certificate,
+          as: 'certificate',
+          required: false
+        }
+      ]
+    });
+    
+    // Format the response
+    const bookings = rows.map(booking => booking.toJSON());
+    
+    res.json({
+      status: 'success',
+      bookings,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        pages: Math.ceil(count / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching bookings list:', error);
+    res.status(500).json({
+      status: 'error',
+      error: 'Failed to fetch bookings',
       message: error.message
     });
   }
@@ -654,67 +996,6 @@ router.get('/bookings/:id', async (req, res) => {
     res.status(404).json({
       status: 'error',
       error: 'Booking not found',
-      message: error.message
-    });
-  }
-});
-
-/**
- * @swagger
- * /insurance/certificates/{number}:
- *   get:
- *     summary: Get certificate details by number
- *     description: Retrieves details for a specific insurance certificate
- *     tags: [Certificates]
- *     parameters:
- *       - in: path
- *         name: number
- *         required: true
- *         description: Certificate number to retrieve
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Certificate details successfully retrieved
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/CertificateResponse'
- *       404:
- *         description: Certificate not found
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       500:
- *         description: Server error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
-router.get('/certificates/:number', async (req, res) => {
-  try {
-    // Only use database lookup for GET requests
-    const certificate = await DatabaseService.getCertificate(req.params.number);
-    res.json({
-      status: 'success',
-      certificate: {
-        certificateNumber: certificate.certificateNumber,
-        productName: certificate.productName,
-        productId: certificate.productId,
-        status: certificate.status,
-        coverageAmount: certificate.coverageAmount,
-        premium: certificate.premium,
-        certificateLink: certificate.certificateLink,
-        validFrom: certificate.validFrom,
-        validTo: certificate.validTo
-      }
-    });
-  } catch (error) {
-    res.status(404).json({
-      status: 'error',
-      error: 'Certificate not found',
       message: error.message
     });
   }
@@ -790,249 +1071,6 @@ router.get('/stats', async (req, res) => {
 
 /**
  * @swagger
- * /insurance/quotes/list:
- *   get:
- *     summary: Get a list of all quotes
- *     description: Returns a paginated list of all quotes
- *     tags: [Insurance Quotes]
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *         description: Page number
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 50
- *         description: Number of items per page
- *     responses:
- *       200:
- *         description: List of quotes successfully retrieved
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/QuoteListResponse'
- *       500:
- *         description: Server error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
-router.get('/quotes/list', async (req, res) => {
-  try {
-    // Get quotes from database with pagination
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = (page - 1) * limit;
-    
-    const { count, rows } = await Quote.findAndCountAll({
-      order: [['createdAt', 'DESC']],
-      limit,
-      offset,
-      paranoid: true // Exclude soft-deleted records
-    });
-    
-    // Format the response
-    const quotes = rows.map(quote => {
-      const formattedQuote = quote.toJSON();
-      
-      // Add any additional formatting or calculated fields
-      return formattedQuote;
-    });
-    
-    res.json({
-      status: 'success',
-      quotes,
-      pagination: {
-        total: count,
-        page,
-        limit,
-        pages: Math.ceil(count / limit)
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching quotes list:', error);
-    res.status(500).json({
-      status: 'error',
-      error: 'Failed to fetch quotes',
-      message: error.message
-    });
-  }
-});
-
-/**
- * @swagger
- * /insurance/certificates/list:
- *   get:
- *     summary: Get a list of all certificates
- *     description: Returns a paginated list of all certificates
- *     tags: [Certificates]
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *         description: Page number
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 50
- *         description: Number of items per page
- *     responses:
- *       200:
- *         description: List of certificates successfully retrieved
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/CertificateListResponse'
- *       500:
- *         description: Server error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
-router.get('/certificates/list', async (req, res) => {
-  try {
-    // Get certificates from database with pagination
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = (page - 1) * limit;
-    
-    const { count, rows } = await Certificate.findAndCountAll({
-      order: [['createdAt', 'DESC']],
-      limit,
-      offset,
-      paranoid: true // Exclude soft-deleted records
-    });
-    
-    // Format the response
-    const certificates = rows.map(certificate => {
-      const formattedCertificate = certificate.toJSON();
-      
-      // Add any additional formatting or calculated fields
-      // Check if certificate is still valid based on dates
-      if (formattedCertificate.validFrom && formattedCertificate.validTo) {
-        const now = new Date();
-        const validFrom = new Date(formattedCertificate.validFrom);
-        const validTo = new Date(formattedCertificate.validTo);
-        
-        if (now < validFrom) {
-          formattedCertificate.status = 'PENDING';
-        } else if (now > validTo) {
-          formattedCertificate.status = 'EXPIRED';
-        }
-      }
-      
-      return formattedCertificate;
-    });
-    
-    res.json({
-      status: 'success',
-      certificates,
-      pagination: {
-        total: count,
-        page,
-        limit,
-        pages: Math.ceil(count / limit)
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching certificates list:', error);
-    res.status(500).json({
-      status: 'error',
-      error: 'Failed to fetch certificates',
-      message: error.message
-    });
-  }
-});
-
-/**
- * @swagger
- * /insurance/bookings/list:
- *   get:
- *     summary: Get a list of all bookings
- *     description: Returns a paginated list of all bookings
- *     tags: [Insurance Bookings]
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *         description: Page number
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 50
- *         description: Number of items per page
- *     responses:
- *       200:
- *         description: List of bookings successfully retrieved
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/BookingListResponse'
- *       500:
- *         description: Server error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
-router.get('/bookings/list', async (req, res) => {
-  try {
-    // Get bookings from database with pagination
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = (page - 1) * limit;
-    
-    const { count, rows } = await Booking.findAndCountAll({
-      order: [['createdAt', 'DESC']],
-      limit,
-      offset,
-      paranoid: true, // Exclude soft-deleted records
-      include: [
-        {
-          model: Certificate,
-          as: 'certificate',
-          required: false
-        }
-      ]
-    });
-    
-    // Format the response
-    const bookings = rows.map(booking => booking.toJSON());
-    
-    res.json({
-      status: 'success',
-      bookings,
-      pagination: {
-        total: count,
-        page,
-        limit,
-        pages: Math.ceil(count / limit)
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching bookings list:', error);
-    res.status(500).json({
-      status: 'error',
-      error: 'Failed to fetch bookings',
-      message: error.message
-    });
-  }
-});
-
-/**
- * @swagger
  * /insurance/search:
  *   get:
  *     summary: Search across quotes, bookings, and certificates
@@ -1093,6 +1131,14 @@ router.get('/bookings/list', async (req, res) => {
  */
 router.get('/search', async (req, res) => {
   try {
+    // Make sure models are available
+    if (!Quote || !Booking || !Certificate) {
+      const { models } = await import('../../database/index.js');
+      Quote = models.Quote;
+      Booking = models.Booking;
+      Certificate = models.Certificate;
+    }
+    
     const { term, type = 'all' } = req.query;
     
     if (!term) {
