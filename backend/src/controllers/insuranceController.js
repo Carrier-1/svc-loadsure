@@ -595,4 +595,253 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/insurance/quotes/list
+ * @desc Get a list of all quotes
+ * @access Public
+ */
+router.get('/quotes/list', async (req, res) => {
+  try {
+    // Get quotes from database with pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    
+    const { count, rows } = await Quote.findAndCountAll({
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+      paranoid: true // Exclude soft-deleted records
+    });
+    
+    // Format the response
+    const quotes = rows.map(quote => {
+      const formattedQuote = quote.toJSON();
+      
+      // Add any additional formatting or calculated fields
+      return formattedQuote;
+    });
+    
+    res.json({
+      status: 'success',
+      quotes,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        pages: Math.ceil(count / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching quotes list:', error);
+    res.status(500).json({
+      status: 'error',
+      error: 'Failed to fetch quotes',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @route GET /api/insurance/certificates/list
+ * @desc Get a list of all certificates
+ * @access Public
+ */
+router.get('/certificates/list', async (req, res) => {
+  try {
+    // Get certificates from database with pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    
+    const { count, rows } = await Certificate.findAndCountAll({
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+      paranoid: true // Exclude soft-deleted records
+    });
+    
+    // Format the response
+    const certificates = rows.map(certificate => {
+      const formattedCertificate = certificate.toJSON();
+      
+      // Add any additional formatting or calculated fields
+      // Check if certificate is still valid based on dates
+      if (formattedCertificate.validFrom && formattedCertificate.validTo) {
+        const now = new Date();
+        const validFrom = new Date(formattedCertificate.validFrom);
+        const validTo = new Date(formattedCertificate.validTo);
+        
+        if (now < validFrom) {
+          formattedCertificate.status = 'PENDING';
+        } else if (now > validTo) {
+          formattedCertificate.status = 'EXPIRED';
+        }
+      }
+      
+      return formattedCertificate;
+    });
+    
+    res.json({
+      status: 'success',
+      certificates,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        pages: Math.ceil(count / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching certificates list:', error);
+    res.status(500).json({
+      status: 'error',
+      error: 'Failed to fetch certificates',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @route GET /api/insurance/bookings/list
+ * @desc Get a list of all bookings
+ * @access Public
+ */
+router.get('/bookings/list', async (req, res) => {
+  try {
+    // Get bookings from database with pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    
+    const { count, rows } = await Booking.findAndCountAll({
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+      paranoid: true, // Exclude soft-deleted records
+      include: [
+        {
+          model: Certificate,
+          as: 'certificate',
+          required: false
+        }
+      ]
+    });
+    
+    // Format the response
+    const bookings = rows.map(booking => booking.toJSON());
+    
+    res.json({
+      status: 'success',
+      bookings,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        pages: Math.ceil(count / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching bookings list:', error);
+    res.status(500).json({
+      status: 'error',
+      error: 'Failed to fetch bookings',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @route GET /api/insurance/search
+ * @desc Search across quotes, bookings, and certificates
+ * @access Public
+ */
+router.get('/search', async (req, res) => {
+  try {
+    const { term, type = 'all' } = req.query;
+    
+    if (!term) {
+      return res.status(400).json({
+        status: 'error',
+        error: 'Search term is required'
+      });
+    }
+    
+    const results = {
+      quotes: [],
+      bookings: [],
+      certificates: []
+    };
+    
+    // Search in quotes if requested
+    if (type === 'all' || type === 'quotes') {
+      const quotes = await Quote.findAll({
+        where: {
+          [Op.or]: [
+            { quoteId: { [Op.iLike]: `%${term}%` } },
+            { requestId: { [Op.iLike]: `%${term}%` } },
+            { 
+              requestData: {
+                [Op.or]: [
+                  { description: { [Op.iLike]: `%${term}%` } },
+                  { '$shipment.cargo.fullDescriptionOfCargo$': { [Op.iLike]: `%${term}%` } }
+                ]
+              }
+            }
+          ]
+        },
+        limit: 20,
+        order: [['createdAt', 'DESC']]
+      });
+      
+      results.quotes = quotes.map(quote => quote.toJSON());
+    }
+    
+    // Search in bookings if requested
+    if (type === 'all' || type === 'bookings') {
+      const bookings = await Booking.findAll({
+        where: {
+          [Op.or]: [
+            { bookingId: { [Op.iLike]: `%${term}%` } },
+            { quoteId: { [Op.iLike]: `%${term}%` } },
+            { policyNumber: { [Op.iLike]: `%${term}%` } }
+          ]
+        },
+        limit: 20,
+        order: [['createdAt', 'DESC']]
+      });
+      
+      results.bookings = bookings.map(booking => booking.toJSON());
+    }
+    
+    // Search in certificates if requested
+    if (type === 'all' || type === 'certificates') {
+      const certificates = await Certificate.findAll({
+        where: {
+          [Op.or]: [
+            { certificateNumber: { [Op.iLike]: `%${term}%` } },
+            { productName: { [Op.iLike]: `%${term}%` } }
+          ]
+        },
+        limit: 20,
+        order: [['createdAt', 'DESC']]
+      });
+      
+      results.certificates = certificates.map(cert => cert.toJSON());
+    }
+    
+    res.json({
+      status: 'success',
+      results
+    });
+  } catch (error) {
+    console.error('Error searching insurance data:', error);
+    res.status(500).json({
+      status: 'error',
+      error: 'Search failed',
+      message: error.message
+    });
+  }
+});
+
 export { router, initialize };

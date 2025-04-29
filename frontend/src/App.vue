@@ -42,8 +42,8 @@
             </div>
           </div>
 
-          <!-- This is where our CargoInsurance component is used -->
-          <CargoInsurance />
+          <!-- Replace CargoInsurance with InsuranceNavigator -->
+          <InsuranceNavigator ref="insuranceNavigator" />
 
           <div class="workflow-navigation">
             <button class="back-btn">Back</button>
@@ -137,19 +137,21 @@
         </div>
       </div>
       <div class="copyright">
-        © 2025 FreightShip Pro. All rights reserved.
+        © 2025 Carrier1. All rights reserved.
       </div>
     </footer>
   </div>
 </template>
 
 <script>
-import CargoInsurance from './components/CargoInsurance.vue';
+// Replace CargoInsurance import with InsuranceNavigator import
+import InsuranceNavigator from './components/InsuranceNavigator.vue';
 
 export default {
   name: 'App',
   components: {
-    CargoInsurance
+    // Replace CargoInsurance with InsuranceNavigator
+    InsuranceNavigator
   },
   data() {
     return {
@@ -184,11 +186,9 @@ export default {
     }
   },
   mounted() {
-    // Listen for insurance selection events from the CargoInsurance component
+    // Listen for insurance selection events from the InsuranceNavigator and CargoInsurance component
     this.$root.$on('insurance-selected', (data) => {
-      this.insuranceSelected = true;
-      this.insuranceAmount = `$${data.premium.toFixed(2)}`;
-      this.integrationFeeAmount = data.integrationFeeAmount ? parseFloat(data.integrationFeeAmount) : 0;
+      this.updateInsuranceSelection(data);
     });
     
     // Listen for insurance cancellation
@@ -202,12 +202,26 @@ export default {
     // Clean up event listeners
     this.$root.$off('insurance-selected');
     this.$root.$off('insurance-canceled');
+  },
+  methods: {
+    // Add new method to handle insurance selection updates
+    updateInsuranceSelection(data) {
+      if (data) {
+        this.insuranceSelected = true;
+        this.insuranceAmount = `$${data.premium.toFixed(2)}`;
+        this.integrationFeeAmount = data.integrationFeeAmount ? parseFloat(data.integrationFeeAmount) : 0;
+      } else {
+        this.insuranceSelected = false;
+        this.insuranceAmount = 'TBD';
+        this.integrationFeeAmount = 0;
+      }
+    }
   }
 };
 </script>
 
 <style>
-/* Add styles for the integration fee */
+/* Add styles for integration fee */
 .integration-fee {
   color: var(--primary-color);
   font-weight: 500;

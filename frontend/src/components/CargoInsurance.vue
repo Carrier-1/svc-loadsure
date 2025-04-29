@@ -77,8 +77,6 @@
           <span class="error-text" v-if="validationErrors.value">{{ validationErrors.value }}</span>
         </div>
         
-        <!-- Other form sections remain the same -->
-        
         <!-- Integration Fee Section -->
         <div class="form-section">
           <h3>Integration Fee</h3>
@@ -118,8 +116,6 @@
             <p>A fixed fee will be added to the premium as a flat dollar amount.</p>
           </div>
         </div>
-        
-        <!-- Other form sections continue -->
         
         <!-- User / Assured Information -->
         <h4>User Information <span class="required">*</span></h4>
@@ -175,8 +171,6 @@
             <span class="error-text" v-if="validationErrors.assuredEmail">{{ validationErrors.assuredEmail }}</span>
           </div>
         </div>
-        
-        <!-- Other address fields remain the same -->
       </div>
       
       <div class="form-actions">
@@ -185,8 +179,6 @@
           :disabled="isDataLoading || isLoading"
         >Get Insurance Quote</button>
       </div>
-      
-      <!-- Other form sections (last updated, certificate lookup) remain the same -->
     </div>
     
     <!-- Loading Indicator -->
@@ -292,7 +284,116 @@
       </div>
     </div>
     
-    <!-- Booking Confirmation and Certificate Display remain the same -->
+    <!-- Booking Confirmation Display -->
+    <div v-if="bookingConfirmation" class="confirmation-display">
+      <div class="confirmation-card">
+        <div class="confirmation-icon">✓</div>
+        <h3>Insurance Booked Successfully!</h3>
+        
+        <div class="confirmation-details">
+          <div class="confirmation-row">
+            <span class="label">Policy Number:</span>
+            <span class="value">{{ bookingConfirmation.policyNumber }}</span>
+          </div>
+          <div class="confirmation-row">
+            <span class="label">Booking ID:</span>
+            <span class="value">{{ bookingConfirmation.bookingId }}</span>
+          </div>
+          <div class="confirmation-row">
+            <span class="label">Booked On:</span>
+            <span class="value">{{ formatDate(bookingConfirmation.timestamp) }}</span>
+          </div>
+        </div>
+        
+        <div class="confirmation-message">
+          <p>Your cargo is now insured. A confirmation email has been sent with all the details.</p>
+        </div>
+        
+        <div class="certificate-document" v-if="bookingConfirmation.certificateUrl">
+          <a :href="bookingConfirmation.certificateUrl" target="_blank" class="document-link">
+            <div class="pdf-icon">PDF</div>
+            <div class="document-info">
+              <div class="document-title">Insurance Certificate</div>
+              <div class="document-desc">Download your insurance certificate</div>
+            </div>
+          </a>
+        </div>
+        
+        <div class="confirmation-actions">
+          <button @click="resetForm" class="primary-btn">Start New Quote</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Certificate Display -->
+    <div v-if="certificate" class="certificate-display">
+      <div class="certificate-card">
+        <h3>Certificate Details</h3>
+        
+        <div class="certificate-details">
+          <div class="certificate-row">
+            <span class="label">Certificate Number:</span>
+            <span class="value">{{ certificate.certificateNumber }}</span>
+          </div>
+          <div class="certificate-row">
+            <span class="label">Product:</span>
+            <span class="value">{{ certificate.productName }}</span>
+          </div>
+          <div class="certificate-row">
+            <span class="label">Status:</span>
+            <span class="value" :class="certificate.status === 'ACTIVE' ? 'status-active' : 'status-inactive'">
+              {{ certificate.status }}
+            </span>
+          </div>
+          <div class="certificate-row">
+            <span class="label">Coverage Amount:</span>
+            <span class="value">${{ certificate.coverageAmount.toFixed(2) }}</span>
+          </div>
+          <div class="certificate-row">
+            <span class="label">Premium:</span>
+            <span class="value">${{ certificate.premium.toFixed(2) }}</span>
+          </div>
+        </div>
+        
+        <div class="certificate-document" v-if="certificate.certificateLink">
+          <a :href="certificate.certificateLink" target="_blank" class="document-link">
+            <div class="pdf-icon">PDF</div>
+            <div class="document-info">
+              <div class="document-title">Insurance Certificate</div>
+              <div class="document-desc">Download your insurance certificate</div>
+            </div>
+          </a>
+        </div>
+        
+        <div class="certificate-actions">
+          <button @click="resetForm" class="primary-btn">Start New Quote</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Certificate Lookup -->
+    <div v-if="!quote && !isLoading && !bookingConfirmation && !certificate" class="certificate-lookup">
+      <h3>Already Have a Certificate?</h3>
+      <div class="form-row">
+        <div class="form-group flex-grow">
+          <label for="certificate-number">Certificate Number</label>
+          <input 
+            id="certificate-number" 
+            v-model="certificateNumber" 
+            type="text" 
+            placeholder="Enter your certificate number"
+          >
+        </div>
+        <button @click="getCertificate" :disabled="!certificateNumber || isLoading" class="primary-btn">
+          Look Up
+        </button>
+      </div>
+    </div>
+    
+    <!-- Last Updated Info -->
+    <div v-if="lastUpdated" class="last-updated-info">
+      Support data last updated: {{ formatLastUpdated }}
+    </div>
   </div>
 </template>
 
@@ -1121,6 +1222,320 @@ export default {
         minute: '2-digit',
         hour12: true
       });
+    },
+    /**
+     * Populates the form with data from a previous quote
+     * @param {Object} quote - The quote object to populate from
+     */
+    populateFormFromQuote(quote) {
+      // Reset the form first to clear any existing data
+      this.resetForm();
+      
+      // Only proceed if we have a valid quote with requestData
+      if (!quote || !quote.requestData) {
+        this.apiError = 'Cannot load quote data: Invalid quote format';
+        return;
+      }
+      
+      try {
+        const requestData = quote.requestData;
+        
+        // Set basic fields
+        if (requestData.description) {
+          this.freightDetails.description = requestData.description;
+        } else if (requestData.shipment && requestData.shipment.cargo && requestData.shipment.cargo.fullDescriptionOfCargo) {
+          this.freightDetails.description = requestData.shipment.cargo.fullDescriptionOfCargo;
+        }
+        
+        // Set the value/cargo value
+        if (requestData.value) {
+          this.freightDetails.value = requestData.value;
+        } else if (requestData.shipment && requestData.shipment.cargo && requestData.shipment.cargo.cargoValue) {
+          this.freightDetails.value = requestData.shipment.cargo.cargoValue.value;
+          this.freightDetails.currency = requestData.shipment.cargo.cargoValue.currency || 'USD';
+        }
+        
+        // Set freight classes
+        if (requestData.freightClasses && Array.isArray(requestData.freightClasses)) {
+          this.freightDetails.freightClasses = requestData.freightClasses.map(fc => ({
+            classId: fc.classId || fc.id,
+            percentage: fc.percentage || 100
+          }));
+        } else if (requestData.shipment && requestData.shipment.cargo && requestData.shipment.cargo.freightClass) {
+          this.freightDetails.freightClasses = requestData.shipment.cargo.freightClass.map(fc => ({
+            classId: fc.id,
+            percentage: fc.percentage || 100
+          }));
+        } else if (requestData.freightClass) {
+          this.freightDetails.freightClasses = [{
+            classId: requestData.freightClass,
+            percentage: 100
+          }];
+        }
+        
+        // Set commodities
+        if (requestData.commodities && Array.isArray(requestData.commodities)) {
+          this.freightDetails.commodities = requestData.commodities.map(c => ({
+            id: c.id
+          }));
+        } else if (requestData.shipment && requestData.shipment.cargo && requestData.shipment.cargo.commodity) {
+          this.freightDetails.commodities = requestData.shipment.cargo.commodity.map(id => ({
+            id: id
+          }));
+        } else if (requestData.commodityId) {
+          this.freightDetails.commodities = [{
+            id: requestData.commodityId
+          }];
+        }
+        
+        // Set equipment type and load type
+        if (requestData.equipmentTypeId) {
+          this.freightDetails.equipmentTypeId = requestData.equipmentTypeId;
+        } else if (requestData.shipment && requestData.shipment.equipmentType) {
+          this.freightDetails.equipmentTypeId = requestData.shipment.equipmentType;
+        }
+        
+        if (requestData.loadTypeId) {
+          this.freightDetails.loadTypeId = requestData.loadTypeId;
+        } else if (requestData.shipment && requestData.shipment.loadType) {
+          this.freightDetails.loadTypeId = requestData.shipment.loadType;
+        }
+        
+        // Set weight information
+        if (requestData.weightValue && requestData.weightUnit) {
+          this.freightDetails.weightValue = requestData.weightValue;
+          this.freightDetails.weightUnit = requestData.weightUnit;
+        } else if (requestData.shipment && requestData.shipment.cargo && requestData.shipment.cargo.weight) {
+          this.freightDetails.weightValue = requestData.shipment.cargo.weight.value;
+          this.freightDetails.weightUnit = requestData.shipment.cargo.weight.unit;
+        }
+        
+        // Set dimension information
+        if (requestData.dimensionLength) {
+          this.freightDetails.dimensionLength = requestData.dimensionLength;
+          this.freightDetails.dimensionWidth = requestData.dimensionWidth;
+          this.freightDetails.dimensionHeight = requestData.dimensionHeight;
+          this.freightDetails.dimensionUnit = requestData.dimensionUnit;
+        }
+        
+        // Set stops (origin and destination)
+        if (requestData.stops && Array.isArray(requestData.stops)) {
+          this.freightDetails.stops = requestData.stops.map((stop, index) => ({
+            ...stop,
+            stopNumber: index + 1 // Ensure stop numbers are sequential
+          }));
+        } else {
+          // Create stops from origin/destination fields if they exist
+          if (requestData.originCity && requestData.originState) {
+            this.freightDetails.stops[0].address.city = requestData.originCity;
+            this.freightDetails.stops[0].address.state = requestData.originState;
+          }
+          
+          if (requestData.destinationCity && requestData.destinationState) {
+            this.freightDetails.stops[1].address.city = requestData.destinationCity;
+            this.freightDetails.stops[1].address.state = requestData.destinationState;
+          }
+        }
+        
+        // Set user information
+        if (requestData.user) {
+          this.freightDetails.user = {
+            name: requestData.user.name || '',
+            email: requestData.user.email || '',
+            id: requestData.user.id || ''
+          };
+        } else if (requestData.userName && requestData.userEmail) {
+          this.freightDetails.user = {
+            name: requestData.userName,
+            email: requestData.userEmail,
+            id: requestData.userEmail
+          };
+        }
+        
+        // Set assured information
+        if (requestData.assured) {
+          this.freightDetails.assured = {
+            name: requestData.assured.name || '',
+            email: requestData.assured.email || '',
+            address: requestData.assured.address || {
+              address1: '',
+              address2: '',
+              city: '',
+              state: '',
+              postal: '',
+              country: 'USA'
+            }
+          };
+        } else if (requestData.assuredName && requestData.assuredEmail) {
+          this.freightDetails.assured = {
+            name: requestData.assuredName,
+            email: requestData.assuredEmail,
+            address: {
+              address1: '',
+              address2: '',
+              city: '',
+              state: '',
+              postal: '',
+              country: 'USA'
+            }
+          };
+        }
+        
+        // Set integration fee information if present
+        if (quote.integrationFeeType && quote.integrationFeeValue) {
+          this.freightDetails.integrationFeeType = quote.integrationFeeType;
+          this.freightDetails.integrationFeeValue = quote.integrationFeeValue;
+        }
+        
+        // Validate the form after population
+        this.$nextTick(() => {
+          this.validateForm();
+        });
+        
+      } catch (error) {
+        console.error('Error populating form from quote:', error);
+        this.apiError = `Error populating form: ${error.message}`;
+      }
+    },
+
+    /**
+     * Populates the form with data from a certificate
+     * @param {Object} certificate - The certificate object to populate from
+     */
+    populateFormFromCertificate(certificate) {
+      // First check if the certificate has response data that contains booking information
+      if (certificate.responseData && certificate.responseData.booking) {
+        // If it has booking data, we can try to find the related quote
+        this.loadQuoteForCertificate(certificate);
+        return;
+      }
+      
+      // If we don't have booking data, we'll try to build a form from the certificate data
+      this.resetForm();
+      
+      try {
+        // Fill in basic details from certificate
+        this.freightDetails.description = certificate.productName || 'Cargo Insurance';
+        this.freightDetails.value = certificate.coverageAmount || 10000;
+        
+        // Fill in user and assured info if available
+        if (certificate.responseData) {
+          const data = certificate.responseData;
+          
+          if (data.customer) {
+            this.freightDetails.user = {
+              name: data.customer.name || '',
+              email: data.customer.email || '',
+              id: data.customer.id || data.customer.email || ''
+            };
+          }
+          
+          if (data.assured) {
+            this.freightDetails.assured = {
+              name: data.assured.name || '',
+              email: data.assured.email || '',
+              address: data.assured.address || {
+                address1: '',
+                address2: '',
+                city: '',
+                state: '',
+                postal: '',
+                country: 'USA'
+              }
+            };
+          }
+          
+          // Try to extract shipment details
+          if (data.loadDetails) {
+            const loadDetails = data.loadDetails;
+            
+            // Extract origin/destination
+            if (loadDetails.origin) {
+              const parts = loadDetails.origin.split(',').map(p => p.trim());
+              if (parts.length >= 2) {
+                this.freightDetails.stops[0].address.city = parts[0];
+                this.freightDetails.stops[0].address.state = parts[1];
+              }
+            }
+            
+            if (loadDetails.destination) {
+              const parts = loadDetails.destination.split(',').map(p => p.trim());
+              if (parts.length >= 2) {
+                this.freightDetails.stops[1].address.city = parts[0];
+                this.freightDetails.stops[1].address.state = parts[1];
+              }
+            }
+            
+            // Extract cargo description
+            if (loadDetails.cargo && loadDetails.cargo.description) {
+              this.freightDetails.description = loadDetails.cargo.description;
+            }
+          }
+        }
+        
+        // Validate the form after population
+        this.$nextTick(() => {
+          this.validateForm();
+        });
+        
+      } catch (error) {
+        console.error('Error populating form from certificate:', error);
+        this.apiError = `Error populating form: ${error.message}`;
+      }
+    },
+
+    /**
+     * Loads the quote associated with a certificate
+     * @param {Object} certificate - The certificate
+     */
+    async loadQuoteForCertificate(certificate) {
+      this.isLoading = true;
+      this.loadingMessage = 'Retrieving quote data...';
+      this.apiError = null;
+      
+      try {
+        // Get the quoteId from certificate response data
+        let quoteId = null;
+        
+        if (certificate.responseData && certificate.responseData.booking) {
+          quoteId = certificate.responseData.booking.quoteId;
+        } else if (certificate.responseData && certificate.responseData.quoteId) {
+          quoteId = certificate.responseData.quoteId;
+        }
+        
+        if (!quoteId) {
+          throw new Error('No quote information found for this certificate');
+        }
+        
+        // Fetch the quote data
+        const response = await fetch(`http://localhost:3000/api/insurance/quotes/${quoteId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch quote: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.status === 'success' && data.quote) {
+          // Populate the form with the quote data
+          this.populateFormFromQuote(data.quote);
+        } else {
+          throw new Error('Invalid quote data received');
+        }
+      } catch (error) {
+        console.error('Error loading quote for certificate:', error);
+        this.apiError = error.message;
+        
+        // Fall back to basic certificate data
+        this.populateFormFromCertificate(certificate);
+      } finally {
+        this.isLoading = false;
+      }
     }
   }
 };
