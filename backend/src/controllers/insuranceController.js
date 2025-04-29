@@ -20,9 +20,45 @@ function initialize(dependencies) {
 }
 
 /**
- * @route POST /api/insurance/quotes
- * @desc Get insurance quote using full freightDetails object
- * @access Public
+ * @swagger
+ * /insurance/quotes:
+ *   post:
+ *     summary: Request an insurance quote using the complete API structure
+ *     description: >
+ *       Creates a new insurance quote request using the full Loadsure API payload structure.
+ *       This endpoint is for advanced integration where you need complete control over the request format.
+ *     tags: [Insurance Quotes]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/FreightDetailsComplete'
+ *     responses:
+ *       200:
+ *         description: Quote successfully created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/QuoteResponse'
+ *       400:
+ *         description: Bad request, validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       408:
+ *         description: Request timeout
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/quotes', (req, res) => {
   const freightDetails = req.body;
@@ -93,82 +129,45 @@ router.post('/quotes', (req, res) => {
 });
 
 /**
- * Updates to existing consumer for quote received events
- * This is in setupConsumers() function
- */
-async function setupConsumers() {
-  // Consumer for quote received events
-  await channel.consume(config.QUEUE_QUOTE_RECEIVED, (msg) => {
-    if (msg !== null) {
-      try {
-        const data = JSON.parse(msg.content.toString());
-        const { requestId } = data;
-        
-        // Check if response indicates an error
-        if (data.error) {
-          console.error(`Error in quote response for request ${requestId}:`, data.error);
-          
-          const res = pendingRequests.get(requestId);
-          if (res) {
-            res.status(400).json({
-              error: data.error,
-              requestId
-            });
-            pendingRequests.delete(requestId);
-          }
-          
-          channel.ack(msg);
-          return;
-        }
-        
-        console.log(`Quote received for request ${requestId}, quote ID: ${data.quoteId}`);
-        
-        // Store quote for potential future booking
-        quotes.set(data.quoteId, data);
-        
-        // Calculate total with integration fee
-        let totalCost = parseFloat(data.premium || 0);
-        if (data.integrationFeeAmount) {
-          totalCost += parseFloat(data.integrationFeeAmount);
-        }
-        
-        // Send response back to client
-        const res = pendingRequests.get(requestId);
-        if (res) {
-          res.json({
-            status: 'success',
-            quote: {
-              quoteId: data.quoteId,
-              premium: data.premium,
-              currency: data.currency,
-              coverageAmount: data.coverageAmount,
-              terms: data.terms,
-              expiresAt: data.expiresAt,
-              deductible: data.deductible || 0,
-              integrationFeeType: data.integrationFeeType,
-              integrationFeeValue: data.integrationFeeValue,
-              integrationFeeAmount: data.integrationFeeAmount,
-              totalCost: totalCost.toFixed(2)
-            }
-          });
-          pendingRequests.delete(requestId);
-        }
-        
-        // Acknowledge the message
-        channel.ack(msg);
-      } catch (error) {
-        console.error('Error processing quote received message:', error);
-        // Negative acknowledge and requeue the message
-        channel.nack(msg, false, true);
-      }
-    }
-  });
-}
-
-/**
- * @route POST /api/insurance/quotes/simple
- * @desc Get insurance quote using primitive values
- * @access Public
+ * @swagger
+ * /insurance/quotes/simple:
+ *   post:
+ *     summary: Request an insurance quote using simplified parameters
+ *     description: >
+ *       Creates a new insurance quote request using simple parameters.
+ *       This endpoint is easier to use for basic integration.
+ *     tags: [Insurance Quotes]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/FreightDetailsSimple'
+ *     responses:
+ *       200:
+ *         description: Quote successfully created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/QuoteResponse'
+ *       400:
+ *         description: Bad request, validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       408:
+ *         description: Request timeout
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/quotes/simple', (req, res) => {
   const {
@@ -311,9 +310,49 @@ router.post('/quotes/simple', (req, res) => {
 });
 
 /**
- * @route POST /api/insurance/bookings
- * @desc Book insurance
- * @access Public
+ * @swagger
+ * /insurance/bookings:
+ *   post:
+ *     summary: Book insurance for a quote
+ *     description: Creates a new insurance booking based on a previously created quote
+ *     tags: [Insurance Bookings]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/BookingRequest'
+ *     responses:
+ *       200:
+ *         description: Booking successfully created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/BookingResponse'
+ *       400:
+ *         description: Bad request, validation error or expired quote
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Quote not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       408:
+ *         description: Request timeout
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/bookings', async (req, res) => {
   const { quoteId } = req.body;
@@ -384,9 +423,37 @@ router.post('/bookings', async (req, res) => {
 });
 
 /**
- * @route POST /api/insurance/certificates
- * @desc Get certificate details
- * @access Public
+ * @swagger
+ * /insurance/certificates:
+ *   post:
+ *     summary: Get certificate details by number
+ *     description: Retrieves details for a specific insurance certificate
+ *     tags: [Certificates]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CertificateRequest'
+ *     responses:
+ *       200:
+ *         description: Certificate details successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CertificateResponse'
+ *       400:
+ *         description: Bad request, validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/certificates', async (req, res) => {
   const { certificateNumber, userId } = req.body;
@@ -462,9 +529,38 @@ router.post('/certificates', async (req, res) => {
 });
 
 /**
- * @route GET /api/insurance/quotes/:id
- * @desc Get quote details by ID
- * @access Public
+ * @swagger
+ * /insurance/quotes/{id}:
+ *   get:
+ *     summary: Get quote details by ID
+ *     description: Retrieves details for a specific insurance quote
+ *     tags: [Insurance Quotes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Quote ID to retrieve
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Quote details successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/QuoteResponse'
+ *       404:
+ *         description: Quote not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/quotes/:id', async (req, res) => {
   try {
@@ -504,9 +600,38 @@ router.get('/quotes/:id', async (req, res) => {
 });
 
 /**
- * @route GET /api/insurance/bookings/:id
- * @desc Get booking details by ID
- * @access Public
+ * @swagger
+ * /insurance/bookings/{id}:
+ *   get:
+ *     summary: Get booking details by ID
+ *     description: Retrieves details for a specific insurance booking
+ *     tags: [Insurance Bookings]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Booking ID to retrieve
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Booking details successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/BookingResponse'
+ *       404:
+ *         description: Booking not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/bookings/:id', async (req, res) => {
   try {
@@ -535,9 +660,38 @@ router.get('/bookings/:id', async (req, res) => {
 });
 
 /**
- * @route GET /api/insurance/certificates/:number
- * @desc Get certificate details by number
- * @access Public
+ * @swagger
+ * /insurance/certificates/{number}:
+ *   get:
+ *     summary: Get certificate details by number
+ *     description: Retrieves details for a specific insurance certificate
+ *     tags: [Certificates]
+ *     parameters:
+ *       - in: path
+ *         name: number
+ *         required: true
+ *         description: Certificate number to retrieve
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Certificate details successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CertificateResponse'
+ *       404:
+ *         description: Certificate not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/certificates/:number', async (req, res) => {
   try {
@@ -567,9 +721,48 @@ router.get('/certificates/:number', async (req, res) => {
 });
 
 /**
- * @route GET /api/insurance/stats
- * @desc Get insurance statistics
- * @access Public
+ * @swagger
+ * /insurance/stats:
+ *   get:
+ *     summary: Get insurance statistics
+ *     description: Returns statistics about quotes, bookings, and certificates
+ *     tags: [Insurance Quotes, Insurance Bookings, Certificates]
+ *     responses:
+ *       200:
+ *         description: Statistics successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: ['success']
+ *                 stats:
+ *                   type: object
+ *                   properties:
+ *                     quotes:
+ *                       type: object
+ *                       properties:
+ *                         total: { type: 'integer' }
+ *                         active: { type: 'integer' }
+ *                         expired: { type: 'integer' }
+ *                         booked: { type: 'integer' }
+ *                     bookings:
+ *                       type: object
+ *                       properties:
+ *                         total: { type: 'integer' }
+ *                         active: { type: 'integer' }
+ *                     certificates:
+ *                       type: object
+ *                       properties:
+ *                         total: { type: 'integer' }
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/stats', async (req, res) => {
   try {
@@ -596,9 +789,38 @@ router.get('/stats', async (req, res) => {
 });
 
 /**
- * @route GET /api/insurance/quotes/list
- * @desc Get a list of all quotes
- * @access Public
+ * @swagger
+ * /insurance/quotes/list:
+ *   get:
+ *     summary: Get a list of all quotes
+ *     description: Returns a paginated list of all quotes
+ *     tags: [Insurance Quotes]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Number of items per page
+ *     responses:
+ *       200:
+ *         description: List of quotes successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/QuoteListResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/quotes/list', async (req, res) => {
   try {
@@ -643,9 +865,38 @@ router.get('/quotes/list', async (req, res) => {
 });
 
 /**
- * @route GET /api/insurance/certificates/list
- * @desc Get a list of all certificates
- * @access Public
+ * @swagger
+ * /insurance/certificates/list:
+ *   get:
+ *     summary: Get a list of all certificates
+ *     description: Returns a paginated list of all certificates
+ *     tags: [Certificates]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Number of items per page
+ *     responses:
+ *       200:
+ *         description: List of certificates successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CertificateListResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/certificates/list', async (req, res) => {
   try {
@@ -703,9 +954,38 @@ router.get('/certificates/list', async (req, res) => {
 });
 
 /**
- * @route GET /api/insurance/bookings/list
- * @desc Get a list of all bookings
- * @access Public
+ * @swagger
+ * /insurance/bookings/list:
+ *   get:
+ *     summary: Get a list of all bookings
+ *     description: Returns a paginated list of all bookings
+ *     tags: [Insurance Bookings]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Number of items per page
+ *     responses:
+ *       200:
+ *         description: List of bookings successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/BookingListResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/bookings/list', async (req, res) => {
   try {
@@ -752,9 +1032,64 @@ router.get('/bookings/list', async (req, res) => {
 });
 
 /**
- * @route GET /api/insurance/search
- * @desc Search across quotes, bookings, and certificates
- * @access Public
+ * @swagger
+ * /insurance/search:
+ *   get:
+ *     summary: Search across quotes, bookings, and certificates
+ *     description: Search for records matching the given term
+ *     tags: [Insurance Quotes, Insurance Bookings, Certificates]
+ *     parameters:
+ *       - in: query
+ *         name: term
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Search term
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [all, quotes, bookings, certificates]
+ *           default: all
+ *         description: Type of records to search
+ *     responses:
+ *       200:
+ *         description: Search results
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [success]
+ *                 results:
+ *                   type: object
+ *                   properties:
+ *                     quotes:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Quote'
+ *                     bookings:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Booking'
+ *                     certificates:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Certificate'
+ *       400:
+ *         description: Bad request, missing search term
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/search', async (req, res) => {
   try {

@@ -1,5 +1,4 @@
-// Loadsure Service for handling insurance quotes and bookings
-// This service connects to RabbitMQ for message handling and uses an in-memory store for quotes and bookings.
+// backend/src/controllers/supportDataController.js
 import express from 'express';
 import supportDataService from '../services/supportDataService.js';
 import supportDataRefreshService from '../services/supportDataRefreshService.js';
@@ -7,9 +6,37 @@ import supportDataRefreshService from '../services/supportDataRefreshService.js'
 const router = express.Router();
 
 /**
- * @route GET /api/support-data/commodities
- * @desc Get all commodities
- * @access Public
+ * @swagger
+ * /support-data/commodities:
+ *   get:
+ *     summary: Get all commodities
+ *     description: Returns a list of all available commodities from Loadsure
+ *     tags: [Support Data]
+ *     responses:
+ *       200:
+ *         description: List of commodities successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                     description: Unique identifier for the commodity
+ *                   name:
+ *                     type: string
+ *                     description: Name of the commodity
+ *                   description:
+ *                     type: string
+ *                     description: Description of the commodity
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/commodities', (req, res) => {
   try {
@@ -22,9 +49,37 @@ router.get('/commodities', (req, res) => {
 });
 
 /**
- * @route GET /api/support-data/commodity-exclusions
- * @desc Get all commodity exclusions
- * @access Public
+ * @swagger
+ * /support-data/commodity-exclusions:
+ *   get:
+ *     summary: Get all commodity exclusions
+ *     description: Returns a list of all commodity exclusions from Loadsure
+ *     tags: [Support Data]
+ *     responses:
+ *       200:
+ *         description: List of commodity exclusions successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     description: Unique identifier for the exclusion
+ *                   commodityId:
+ *                     type: integer
+ *                     description: ID of the commodity with exclusions
+ *                   description:
+ *                     type: string
+ *                     description: Description of the exclusion
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/commodity-exclusions', (req, res) => {
   try {
@@ -37,9 +92,37 @@ router.get('/commodity-exclusions', (req, res) => {
 });
 
 /**
- * @route GET /api/support-data/equipment-types
- * @desc Get all equipment types
- * @access Public
+ * @swagger
+ * /support-data/equipment-types:
+ *   get:
+ *     summary: Get all equipment types
+ *     description: Returns a list of all available equipment types from Loadsure
+ *     tags: [Support Data]
+ *     responses:
+ *       200:
+ *         description: List of equipment types successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                     description: Unique identifier for the equipment type
+ *                   name:
+ *                     type: string
+ *                     description: Name of the equipment type
+ *                   description:
+ *                     type: string
+ *                     description: Description of the equipment type
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/equipment-types', (req, res) => {
   try {
@@ -52,9 +135,37 @@ router.get('/equipment-types', (req, res) => {
 });
 
 /**
- * @route GET /api/support-data/load-types
- * @desc Get all load types
- * @access Public
+ * @swagger
+ * /support-data/load-types:
+ *   get:
+ *     summary: Get all load types
+ *     description: Returns a list of all available load types from Loadsure
+ *     tags: [Support Data]
+ *     responses:
+ *       200:
+ *         description: List of load types successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     description: Unique identifier for the load type
+ *                   name:
+ *                     type: string
+ *                     description: Name of the load type
+ *                   description:
+ *                     type: string
+ *                     description: Description of the load type
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/load-types', (req, res) => {
   try {
@@ -67,9 +178,37 @@ router.get('/load-types', (req, res) => {
 });
 
 /**
- * @route GET /api/support-data/freight-classes
- * @desc Get all freight classes
- * @access Public
+ * @swagger
+ * /support-data/freight-classes:
+ *   get:
+ *     summary: Get all freight classes
+ *     description: Returns a list of all freight classes from Loadsure
+ *     tags: [Support Data]
+ *     responses:
+ *       200:
+ *         description: List of freight classes successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     description: Unique identifier for the freight class
+ *                   name:
+ *                     type: string
+ *                     description: Name of the freight class
+ *                   description:
+ *                     type: string
+ *                     description: Description of the freight class
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/freight-classes', (req, res) => {
   try {
@@ -82,9 +221,37 @@ router.get('/freight-classes', (req, res) => {
 });
 
 /**
- * @route GET /api/support-data/terms-of-sales
- * @desc Get all terms of sales
- * @access Public
+ * @swagger
+ * /support-data/terms-of-sales:
+ *   get:
+ *     summary: Get all terms of sales
+ *     description: Returns a list of all terms of sales from Loadsure
+ *     tags: [Support Data]
+ *     responses:
+ *       200:
+ *         description: List of terms of sales successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     description: Unique identifier for the terms of sale
+ *                   name:
+ *                     type: string
+ *                     description: Name of the terms of sale
+ *                   description:
+ *                     type: string
+ *                     description: Description of the terms of sale
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/terms-of-sales', (req, res) => {
   try {
@@ -97,9 +264,25 @@ router.get('/terms-of-sales', (req, res) => {
 });
 
 /**
- * @route GET /api/support-data/status
- * @desc Get support data status
- * @access Public
+ * @swagger
+ * /support-data/status:
+ *   get:
+ *     summary: Get support data status
+ *     description: Returns the current status of support data, including last update time
+ *     tags: [Support Data]
+ *     responses:
+ *       200:
+ *         description: Support data status successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SupportDataStatus'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/status', (req, res) => {
   try {
@@ -127,9 +310,48 @@ router.get('/status', (req, res) => {
 });
 
 /**
- * @route POST /api/support-data/refresh
- * @desc Manually refresh all support data
- * @access Private (should be secured in production)
+ * @swagger
+ * /support-data/refresh:
+ *   post:
+ *     summary: Manually refresh all support data
+ *     description: Triggers a manual refresh of all support data from Loadsure
+ *     tags: [Support Data]
+ *     responses:
+ *       200:
+ *         description: Support data refreshed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 lastUpdated:
+ *                   type: string
+ *                   format: date-time
+ *                 dataCount:
+ *                   type: object
+ *                   properties:
+ *                     commodities:
+ *                       type: integer
+ *                     commodityExclusions:
+ *                       type: integer
+ *                     equipmentTypes:
+ *                       type: integer
+ *                     loadTypes:
+ *                       type: integer
+ *                     freightClasses:
+ *                       type: integer
+ *                     termsOfSales:
+ *                       type: integer
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/refresh', async (req, res) => {
   try {
@@ -158,9 +380,46 @@ router.post('/refresh', async (req, res) => {
 });
 
 /**
- * @route POST /api/support-data/schedule
- * @desc Update the refresh schedule
- * @access Private (should be secured in production)
+ * @swagger
+ * /support-data/schedule:
+ *   post:
+ *     summary: Update the refresh schedule
+ *     description: Updates the cron schedule for automatic support data refresh
+ *     tags: [Support Data]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/SupportDataRefreshRequest'
+ *     responses:
+ *       200:
+ *         description: Refresh schedule updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 schedule:
+ *                   type: string
+ *                 active:
+ *                   type: boolean
+ *       400:
+ *         description: Bad request, schedule is required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/schedule', (req, res) => {
   try {

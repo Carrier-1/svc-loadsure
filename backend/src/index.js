@@ -1,5 +1,4 @@
-// Loadsure Service for handling insurance quotes and bookings
-// This service connects to RabbitMQ for message handling and uses an in-memory store for quotes and bookings.
+// backend/src/index.js - with Swagger integration
 import express from 'express';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,6 +12,9 @@ import supportDataRefreshService from './services/supportDataRefreshService.js';
 // Import controllers
 import supportDataController from './controllers/supportDataController.js';
 import * as insuranceController from './controllers/insuranceController.js';
+
+// Import Swagger setup
+import { setupSwagger } from './swagger.js';
 
 // Create Express app
 const app = express();
@@ -93,6 +95,12 @@ async function setupConsumers() {
         // Store quote for potential future booking
         quotes.set(data.quoteId, data);
         
+        // Calculate total with integration fee
+        let totalCost = parseFloat(data.premium || 0);
+        if (data.integrationFeeAmount) {
+          totalCost += parseFloat(data.integrationFeeAmount);
+        }
+        
         // Send response back to client
         const res = pendingRequests.get(requestId);
         if (res) {
@@ -105,7 +113,11 @@ async function setupConsumers() {
               coverageAmount: data.coverageAmount,
               terms: data.terms,
               expiresAt: data.expiresAt,
-              deductible: data.deductible || 0
+              deductible: data.deductible || 0,
+              integrationFeeType: data.integrationFeeType,
+              integrationFeeValue: data.integrationFeeValue,
+              integrationFeeAmount: data.integrationFeeAmount,
+              totalCost: totalCost.toFixed(2)
             }
           });
           pendingRequests.delete(requestId);
@@ -231,9 +243,13 @@ async function startServer() {
     app.use('/api/support-data', supportDataController);
     app.use('/api/insurance', insuranceController.router);
     
+    // Setup Swagger documentation
+    setupSwagger(app);
+    
     // Start the API server
     app.listen(config.PORT, () => {
       console.log(`Loadsure Insurance Microservice API running on port ${config.PORT}`);
+      console.log(`Swagger documentation available at http://localhost:${config.PORT}/api-docs`);
     });
   } catch (error) {
     console.error('Failed to start services:', error);
