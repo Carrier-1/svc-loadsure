@@ -1,31 +1,26 @@
-# Frontend Dockerfile
-# Build stage
-FROM node:18-alpine as build-stage
+# Optimize dependencies installation and build caching
+FROM node:23-alpine as build-stage
 
 WORKDIR /app
 
-# Copy package files first
+# Copy package files first and install dependencies
+# This layer will be cached unless package files change
 COPY package*.json ./
-
-# Use npm ci instead of npm install
 RUN npm ci
 
-# Copy source files
-COPY . .
+# Copy only necessary source files for building
+COPY .eslintrc* ./ 
+COPY babel.config.js ./
+COPY vue.config.js ./
+COPY src/ ./src/
+COPY public/ ./public/
 
 # Build the app
 RUN npm run build
 
 # Production stage with Nginx
-FROM nginx:stable-alpine as production-stage
-
-# Copy built files from build stage
+FROM nginx:stable-alpine AS production-stage
 COPY --from=build-stage /app/dist /usr/share/nginx/html
-
-# Copy custom Nginx config if needed
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Expose HTTP port
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
-
 CMD ["nginx", "-g", "daemon off;"]

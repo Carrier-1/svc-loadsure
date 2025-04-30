@@ -84,15 +84,18 @@ export default (sequelize) => {
 
   // Associations
   Booking.associate = (models) => {
+    // Modified association - using bookingId string instead of UUID for relationship
     Booking.belongsTo(models.Quote, {
       foreignKey: 'quoteId',
+      targetKey: 'quoteId', // Use quoteId string field instead of Quote.id UUID
       as: 'quote',
-      constraints: false, // Don't enforce foreign key constraint at DB level
-      // We use the quoteId string, not the Quote.id UUID
+      constraints: false // Don't enforce foreign key constraint at DB level
     });
     
+    // Modified association - using bookingId string instead of UUID for relationship
     Booking.hasOne(models.Certificate, {
       foreignKey: 'bookingId',
+      sourceKey: 'bookingId', // Use bookingId string field instead of Booking.id UUID
       as: 'certificate'
     });
   };

@@ -42,8 +42,7 @@
             </div>
           </div>
 
-          <!-- Replace CargoInsurance with InsuranceNavigator -->
-          <InsuranceNavigator ref="insuranceNavigator" />
+          <InsuranceNavigator ref="insuranceNavigator" @insurance-selected="updateInsuranceSelection" />
 
           <div class="workflow-navigation">
             <button class="back-btn">Back</button>
@@ -144,13 +143,11 @@
 </template>
 
 <script>
-// Replace CargoInsurance import with InsuranceNavigator import
 import InsuranceNavigator from './components/InsuranceNavigator.vue';
 
 export default {
   name: 'App',
   components: {
-    // Replace CargoInsurance with InsuranceNavigator
     InsuranceNavigator
   },
   data() {
@@ -186,11 +183,6 @@ export default {
     }
   },
   mounted() {
-    // Listen for insurance selection events from the InsuranceNavigator and CargoInsurance component
-    this.$root.$on('insurance-selected', (data) => {
-      this.updateInsuranceSelection(data);
-    });
-    
     // Listen for insurance cancellation
     this.$root.$on('insurance-canceled', () => {
       this.insuranceSelected = false;
@@ -200,11 +192,10 @@ export default {
   },
   beforeUnmount() {
     // Clean up event listeners
-    this.$root.$off('insurance-selected');
     this.$root.$off('insurance-canceled');
   },
   methods: {
-    // Add new method to handle insurance selection updates
+    // Method to handle insurance selection updates
     updateInsuranceSelection(data) {
       if (data) {
         this.insuranceSelected = true;

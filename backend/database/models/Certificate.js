@@ -82,8 +82,10 @@ export default (sequelize) => {
 
   // Associations
   Certificate.associate = (models) => {
+    // Modified association - using bookingId string instead of UUID for relationship
     Certificate.belongsTo(models.Booking, {
       foreignKey: 'bookingId',
+      targetKey: 'bookingId', // Use bookingId string field instead of Booking.id UUID
       as: 'booking',
       constraints: false // Don't enforce foreign key constraint at DB level
     });

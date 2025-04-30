@@ -79,11 +79,9 @@ router.get('/quotes/list', async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const offset = (page - 1) * limit;
     
-    // Make sure Quote model is available
-    if (!Quote) {
-      const { models } = await import('../../database/index.js');
-      Quote = models.Quote;
-    }
+    // Import the Quote model from database
+    const { models } = await import('../../database/index.js');
+    const { Quote } = models;
     
     const { count, rows } = await Quote.findAndCountAll({
       order: [['createdAt', 'DESC']],
@@ -119,6 +117,7 @@ router.get('/quotes/list', async (req, res) => {
     });
   }
 });
+
 
 /**
  * @swagger
@@ -630,16 +629,14 @@ router.post('/bookings', async (req, res) => {
  */
 router.get('/certificates/list', async (req, res) => {
   try {
-    // Make sure Certificate model is available
-    if (!Certificate) {
-      const { models } = await import('../../database/index.js');
-      Certificate = models.Certificate;
-    }
-    
     // Get certificates from database with pagination
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
     const offset = (page - 1) * limit;
+    
+    // Import the Certificate model from database
+    const { models } = await import('../../database/index.js');
+    const { Certificate } = models;
     
     const { count, rows } = await Certificate.findAndCountAll({
       order: [['createdAt', 'DESC']],
@@ -892,17 +889,14 @@ router.get('/certificates/:number', async (req, res) => {
  */
 router.get('/bookings/list', async (req, res) => {
   try {
-    // Make sure Booking and Certificate models are available
-    if (!Booking || !Certificate) {
-      const { models } = await import('../../database/index.js');
-      Booking = models.Booking;
-      Certificate = models.Certificate;
-    }
-    
     // Get bookings from database with pagination
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
     const offset = (page - 1) * limit;
+    
+    // Import the required models from database
+    const { models } = await import('../../database/index.js');
+    const { Booking, Certificate } = models;
     
     const { count, rows } = await Booking.findAndCountAll({
       order: [['createdAt', 'DESC']],
@@ -940,6 +934,7 @@ router.get('/bookings/list', async (req, res) => {
     });
   }
 });
+
 
 /**
  * @swagger
@@ -1131,14 +1126,6 @@ router.get('/stats', async (req, res) => {
  */
 router.get('/search', async (req, res) => {
   try {
-    // Make sure models are available
-    if (!Quote || !Booking || !Certificate) {
-      const { models } = await import('../../database/index.js');
-      Quote = models.Quote;
-      Booking = models.Booking;
-      Certificate = models.Certificate;
-    }
-    
     const { term, type = 'all' } = req.query;
     
     if (!term) {
@@ -1147,6 +1134,11 @@ router.get('/search', async (req, res) => {
         error: 'Search term is required'
       });
     }
+    
+    // Import models and Sequelize operators
+    const { models, Sequelize } = await import('../../database/index.js');
+    const { Quote, Booking, Certificate } = models;
+    const { Op } = Sequelize;
     
     const results = {
       quotes: [],

@@ -1,0 +1,111 @@
+# Makefile for Docker Compose project
+
+# Variables
+COMPOSE_FILE = docker-compose.yml
+COMPOSE_DEV_FILE = docker-compose.dev.yml
+SERVICES = api-service loadsure-service frontend db-setup
+
+# Set BuildKit environment variables
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+
+# Default target
+.PHONY: all
+all: build up
+
+# Build all services
+.PHONY: build
+build:
+	docker-compose -f $(COMPOSE_FILE) build --parallel
+
+# Build specific services
+.PHONY: build-api
+build-api:
+	docker-compose -f $(COMPOSE_FILE) build api-service
+
+.PHONY: build-loadsure
+build-loadsure:
+	docker-compose -f $(COMPOSE_FILE) build loadsure-service
+
+.PHONY: build-frontend
+build-frontend:
+	docker-compose -f $(COMPOSE_FILE) build frontend
+
+# Start all services
+.PHONY: up
+up:
+	docker-compose -f $(COMPOSE_FILE) up -d
+
+# Start development environment
+.PHONY: dev
+dev:
+	docker-compose -f $(COMPOSE_FILE) -f $(COMPOSE_DEV_FILE) up -d
+
+# Stop all services
+.PHONY: down
+down:
+	docker-compose -f $(COMPOSE_FILE) down
+
+# View logs
+.PHONY: logs
+logs:
+	docker-compose -f $(COMPOSE_FILE) logs -f
+
+# Clean Docker resources
+.PHONY: clean
+clean:
+	docker system prune -f
+
+# Deep clean Docker resources (careful!)
+.PHONY: clean-all
+clean-all:
+	docker system prune -a -f
+	docker volume prune -f
+
+# Selective rebuild based on git changes
+.PHONY: rebuild-changed
+rebuild-changed:
+	@CHANGED_DIRS=""; \
+	if [ -n "$$(git diff --name-only HEAD HEAD~1 -- ./frontend)" ]; then \
+		CHANGED_DIRS="$$CHANGED_DIRS frontend"; \
+	fi; \
+	if [ -n "$$(git diff --name-only HEAD HEAD~1 -- ./backend)" ]; then \
+		CHANGED_DIRS="$$CHANGED_DIRS api-service loadsure-service"; \
+	fi; \
+	if [ -z "$$CHANGED_DIRS" ]; then \
+		echo "No changes detected in service directories"; \
+	else \
+		echo "Rebuilding: $$CHANGED_DIRS"; \
+		docker-compose -f $(COMPOSE_FILE) build $$CHANGED_DIRS; \
+		docker-compose -f $(COMPOSE_FILE) up -d $$CHANGED_DIRS; \
+	fi
+
+# Run database migrations
+.PHONY: migrate
+migrate:
+	docker-compose -f $(COMPOSE_FILE) run --rm api-service npm run migrate
+
+# Check status
+.PHONY: status
+status:
+	docker-compose -f $(COMPOSE_FILE) ps
+
+# Help
+.PHONY: help
+help:
+	@echo "Available targets:"
+	@echo "  all              - Build and start all services (default)"
+	@echo "  build            - Build all Docker images"
+	@echo "  build-api        - Build only API service"
+	@echo "  build-loadsure   - Build only Loadsure service"
+	@echo "  build-frontend   - Build only frontend service"
+	@echo "  up               - Start all services"
+	@echo "  dev              - Start development environment"
+	@echo "  down             - Stop all services"
+	@echo "  logs             - View logs"
+	@echo "  clean            - Clean unused Docker resources"
+	@echo "  clean-all        - Deep clean Docker resources (careful!)"
+	@echo "  rebuild-changed  - Selectively rebuild services with changes"
+	@echo "  migrate          - Run database migrations"
+	@echo "  status           - Check status of services"
+	@echo "  help             - Show this help message"

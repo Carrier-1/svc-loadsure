@@ -1,9 +1,11 @@
+version: '3.8'
+
 services:
   rabbitmq:
     image: rabbitmq:3.12-management
     ports:
-      - "5672:5672"   # AMQP protocol port
-      - "15672:15672" # Management interface port
+      - "5672:5672"
+      - "15672:15672"
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
@@ -14,6 +16,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    # Add this for faster development cycles - remove for production
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   postgres:
     image: postgres:14-alpine
@@ -30,37 +37,45 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-      start_period: 10s
+    # Add this for faster development cycles - remove for production
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   db-setup:
-      build:
-        context: ./backend
-        dockerfile: Dockerfile
-      environment:
-        - DB_DIALECT=postgres
-        - DB_HOST=postgres
-        - DB_PORT=5432
-        - DB_USERNAME=loadsure
-        - DB_PASSWORD=loadsurepass
-        - DB_NAME=loadsure
-      depends_on:
-        postgres:
-          condition: service_healthy
-      volumes:
-        - ./backend:/usr/src/app
-      working_dir: /usr/src/app
-      command: >
-        sh -c "
-          echo 'Running database migrations...' &&
-          npx sequelize-cli db:migrate &&
-          echo 'Migrations completed successfully!'
-        "
-      restart: "no"
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      # Add cache mounting for faster builds
+      cache_from:
+        - node:23-alpine
+    environment:
+      - DB_DIALECT=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=loadsure
+      - DB_PASSWORD=loadsurepass
+      - DB_NAME=loadsure
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/usr/src/app
+    command: >
+      sh -c "
+        echo 'Running database migrations...' &&
+        npx sequelize-cli db:migrate &&
+        echo 'Migrations completed successfully!'
+      "
+    restart: "no"
 
   api-service:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      cache_from:
+        - node:23-alpine
     ports:
       - "3000:3000"
     environment:
@@ -70,21 +85,13 @@ services:
       - LOADSURE_BASE_URL=https://portal.loadsure.net
       - SUPPORT_DATA_REFRESH_SCHEDULE=0 0 * * *
       - NODE_OPTIONS=--experimental-vm-modules
-      - NODE_ENV=development
-      - DB_DIALECT=postgres
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USERNAME=loadsure
-      - DB_PASSWORD=loadsurepass
-      - DB_NAME=loadsure
+      - NODE_ENV=production # Change to production for faster startup
     volumes:
       - ./backend/data:/usr/src/app/data
     depends_on:
       db-setup:
         condition: service_completed_successfully
       rabbitmq:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
     command: node src/index.js
     healthcheck:
@@ -98,26 +105,18 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      cache_from:
+        - node:23-alpine
     environment:
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
       - LOADSURE_API_KEY=MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN
       - LOADSURE_BASE_URL=https://portal.loadsure.net
       - NODE_OPTIONS=--experimental-vm-modules
-      - NODE_ENV=development
-      - DB_DIALECT=postgres
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USERNAME=loadsure
-      - DB_PASSWORD=loadsurepass
-      - DB_NAME=loadsure
+      - NODE_ENV=production # Change to production for faster startup
     volumes:
       - ./backend/data:/usr/src/app/data
     depends_on:
       api-service:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
     command: node src/services/loadsureService.js
 
@@ -125,8 +124,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      cache_from:
+        - node:18-alpine
+        - nginx:stable-alpine
     ports:
-      - "8080:80"  # Map to nginx port inside the Vue container
+      - "8080:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
@@ -136,4 +138,3 @@ volumes:
   rabbitmq_data:
   postgres_data:
     name: loadsure_postgres_data
-    external: false
