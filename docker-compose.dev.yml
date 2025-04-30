@@ -16,6 +16,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   postgres:
     image: postgres:14-alpine
@@ -54,151 +58,197 @@ services:
           memory: 256M
 
   db-setup:
-      build:
-        context: ./backend
-        dockerfile: Dockerfile
-      environment:
-        - NODE_ENV=development
-        - DB_DIALECT=postgres
-        - DB_HOST=postgres
-        - DB_PORT=5432
-        - DB_USERNAME=loadsure
-        - DB_PASSWORD=loadsurepass
-        - DB_NAME=loadsure_dev
-        - DB_SSL=false
-      depends_on:
-        postgres:
-          condition: service_healthy
-      volumes:
-        - ./backend:/usr/src/app
-        - /usr/src/app/node_modules
-      command: >
-        sh -c "
-          echo 'Running database migrations...' &&
-          npx sequelize-cli db:migrate &&
-          echo 'Migrations completed successfully!'
-        "
-      restart: "no"
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      cache_from:
+      - node:18-alpine
+    environment:
+    - NODE_ENV=development
+    - DB_DIALECT=postgres
+    - DB_HOST=postgres
+    - DB_PORT=5432
+    - DB_USERNAME=loadsure
+    - DB_PASSWORD=loadsurepass
+    - DB_NAME=loadsure_dev
+    - DB_SSL=false
+  depends_on:
+    postgres:
+      condition: service_healthy
+  volumes:
+    - ./backend:/usr/src/app
+    - /usr/src/app/node_modules
+  command: >
+    sh -c "
+      echo 'Running database migrations...' &&
+      npx sequelize-cli db:migrate &&
+      echo 'Migrations completed successfully!'
+    "
+  restart: "no"
 
   api-service:
-      build:
-        context: ./backend
-        dockerfile: Dockerfile
-      ports:
-        - "3000:3000"
-      environment:
-        - NODE_ENV=development
-        - PORT=3000
-        - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-        - REDIS_URL=redis://redis:6379
-        - LOADSURE_API_KEY=MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN
-        - LOADSURE_BASE_URL=https://portal.loadsure.net
-        - SUPPORT_DATA_REFRESH_SCHEDULE=0 0 * * *
-        - DB_DIALECT=postgres
-        - DB_HOST=postgres
-        - DB_PORT=5432
-        - DB_USERNAME=loadsure
-        - DB_PASSWORD=loadsurepass
-        - DB_NAME=loadsure_dev
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    # Don't expose port directly - only to internal network
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3000
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - REDIS_URL=redis://redis:6379
+      - LOADSURE_API_KEY=MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN
+      - LOADSURE_BASE_URL=https://portal.loadsure.net
+      - SUPPORT_DATA_REFRESH_SCHEDULE=0 0 * * *
+      - NODE_OPTIONS=--experimental-vm-modules
+      - DB_SSL=false
+      - DB_DIALECT=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=loadsure
+      - DB_PASSWORD=loadsurepass
+      - DB_NAME=loadsure_dev
         - DB_SSL=false
-        - RATE_LIMIT_WINDOW_MS=60000
-        - RATE_LIMIT_MAX_REQUESTS=100
-        - DOCKER_SCALE=true
-      volumes:
-        - ./backend:/usr/src/app
-        - /usr/src/app/node_modules
+      - RATE_LIMIT_WINDOW_MS=60000
+      - RATE_LIMIT_MAX_REQUESTS=100
+      - DOCKER_SCALE=true
+      # Each instance gets a unique identifier
+      - SERVICE_INSTANCE=${HOSTNAME}
+    volumes:
+      - ./backend:/usr/src/app
+      - /usr/src/app/node_modules
         - ./backend/data:/usr/src/app/data
-      depends_on:
-        db-setup:
-          condition: service_completed_successfully
-        rabbitmq:
-          condition: service_healthy
-        redis:
-          condition: service_healthy
-      command: npm run dev
-      healthcheck:
-        test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/support-data/status"]
-        interval: 10s
-        timeout: 5s
-        retries: 5
-        start_period: 10s
-      deploy:
-        replicas: 2
+    depends_on:
+      db-setup:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "if [ \"$$NODE_ENV\" = \"production\" ]; then 
+        node src/index.js; 
+      else 
+        npx nodemon src/index.js; 
+      fi"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Use swarm-style replicas instead of scale
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "3000:80"  # Expose NGINX on port 3000
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   loadsure-service:
-      build:
-        context: ./backend
-        dockerfile: Dockerfile
-      environment:
-        - NODE_ENV=development
-        - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-        - REDIS_URL=redis://redis:6379
-        - LOADSURE_API_KEY=MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN
-        - LOADSURE_BASE_URL=https://portal.loadsure.net
-        - DB_DIALECT=postgres
-        - DB_HOST=postgres
-        - DB_PORT=5432
-        - DB_USERNAME=loadsure
-        - DB_PASSWORD=loadsurepass
-        - DB_NAME=loadsure_dev
-        - DB_SSL=false
-        - WORKER_CONCURRENCY=3
-      volumes:
-        - ./backend:/usr/src/app
-        - /usr/src/app/node_modules
-        - ./backend/data:/usr/src/app/data
-      depends_on:
-        api-service:
-          condition: service_healthy
-        redis:
-          condition: service_healthy
-      command: npm run service
-      deploy:
-        replicas: 1
-        resources:
-          limits:
-            cpus: '0.5'
-            memory: 512M
-
-  queue-monitor:
     build:
       context: ./backend
       dockerfile: Dockerfile
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-      - DOCKER_SCALE=true
-      - MIN_WORKERS=1
-      - MAX_WORKERS=5
-      - SCALE_UP_THRESHOLD=10
-      - SCALE_DOWN_THRESHOLD=2
-      - CHECK_INTERVAL=10000
+      - REDIS_URL=redis://redis:6379
+      - LOADSURE_API_KEY=MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN
+      - LOADSURE_BASE_URL=https://portal.loadsure.net
+      - NODE_OPTIONS=--experimental-vm-modules
+      - DB_SSL=false
+      - DB_DIALECT=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=loadsure
+      - DB_PASSWORD=loadsurepass
+      - DB_NAME=loadsure_dev
+      - DB_SSL=false
+      - WORKER_CONCURRENCY=3
+      # Each instance gets a unique identifier
+      - WORKER_ID=${HOSTNAME}
     volumes:
       - ./backend:/usr/src/app
       - /usr/src/app/node_modules
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ./backend/data:/usr/src/app/data
     depends_on:
-      rabbitmq:
+      api-service:
         condition: service_healthy
-    command: node src/services/queueMonitorStarter.js
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    environment:
-      - NODE_ENV=development
-    depends_on:
-      - api-service
-      - loadsure-service
-    deploy:
+      redis:
+        condition: service_healthy
+      command: >
+        sh -c "if [ \"$$NODE_ENV\" = \"production\" ]; then 
+        node src/services/loadsureService.js; 
+        else 
+        npx nodemon src/services/loadsureService.js; 
+        fi"
+      deploy:
       replicas: 1
-    command: npm run serve
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+      queue-monitor:
+        build:
+        context: ./backend
+        dockerfile: Dockerfile
+        environment:
+        - NODE_ENV=${NODE_ENV:-development}
+        - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+        - DOCKER_SCALE=true
+        - MIN_WORKERS=1
+        - MAX_WORKERS=5
+        - SCALE_UP_THRESHOLD=10
+        - SCALE_DOWN_THRESHOLD=2
+        - CHECK_INTERVAL=10000
+        volumes:
+        - ./backend:/usr/src/app
+        - /usr/src/app/node_modules
+        - /var/run/docker.sock:/var/run/docker.sock
+        depends_on:
+          rabbitmq:
+            condition: service_healthy
+        command: node src/services/queueMonitorStarter.js
+
+      frontend:
+        build:
+        context: ./frontend
+        dockerfile: Dockerfile
+        ports:
+          - "8080:8080"
+        volumes:
+          - ./frontend:/app
+          - /app/node_modules
+        environment:
+          - NODE_ENV=${NODE_ENV:-development}
+          - VUE_APP_API_URL=http://localhost:3000/api
+        depends_on:
+          - nginx
+        deploy:
+          replicas: 1
+        command: npm run serve
 
 volumes:
   rabbitmq_data_dev:

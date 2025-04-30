@@ -58,39 +58,39 @@ services:
           memory: 256M
 
   db-setup:
-      build:
-        context: ./backend
-        dockerfile: Dockerfile
-        cache_from:
-          - node:18-alpine
-      environment:
-        - NODE_ENV=production
-        - DB_DIALECT=postgres
-        - DB_HOST=postgres
-        - DB_PORT=5432
-        - DB_USERNAME=loadsure
-        - DB_PASSWORD=loadsurepass
-        - DB_NAME=loadsure
-        - DB_SSL=false
-      depends_on:
-        postgres:
-          condition: service_healthy
-      volumes:
-        - ./backend:/usr/src/app
-      command: >
-        sh -c "
-          echo 'Running database migrations...' &&
-          npx sequelize-cli db:migrate &&
-          echo 'Migrations completed successfully!'
-        "
-      restart: "no"
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      cache_from:
+        - node:18-alpine
+    environment:
+      - NODE_ENV=production
+      - DB_DIALECT=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=loadsure
+      - DB_PASSWORD=loadsurepass
+      - DB_NAME=loadsure
+      - DB_SSL=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/usr/src/app
+    command: >
+      sh -c "
+        echo 'Running database migrations...' &&
+        npx sequelize-cli db:migrate &&
+        echo 'Migrations completed successfully!'
+      "
+    restart: "no"
 
   api-service:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3000
@@ -110,6 +110,7 @@ services:
       - RATE_LIMIT_WINDOW_MS=60000
       - RATE_LIMIT_MAX_REQUESTS=100
       - DOCKER_SCALE=true
+      - SERVICE_INSTANCE=${HOSTNAME}
     volumes:
       - ./backend:/usr/src/app
       - /usr/src/app/node_modules
@@ -127,13 +128,32 @@ services:
         npx nodemon src/index.js; 
       fi"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/support-data/status"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
     deploy:
       replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "3000:80"  # Expose NGINX on port 3000
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   loadsure-service:
     build:
@@ -154,6 +174,7 @@ services:
       - DB_PASSWORD=loadsurepass
       - DB_NAME=loadsure
       - WORKER_CONCURRENCY=3
+      - WORKER_ID=${HOSTNAME}
     volumes:
       - ./backend:/usr/src/app
       - /usr/src/app/node_modules
@@ -169,11 +190,17 @@ services:
         npx nodemon src/services/loadsureService.js; 
       fi"
     deploy:
-        replicas: 1
-        resources:
-          limits:
-            cpus: '0.5'
-            memory: 512M
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
   queue-monitor:
     build:
       context: ./backend
@@ -207,6 +234,7 @@ services:
       - /app/node_modules
     environment:
       - NODE_ENV=${NODE_ENV:-development}
+      - VUE_APP_API_URL=http://localhost:3000/api
     depends_on:
       - api-service
       - loadsure-service

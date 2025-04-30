@@ -25,8 +25,8 @@ class QueueMonitorService {
     this.checkTimer = null;
     this.connection = null;
     this.channel = null;
-    this.workerProcesses = new Map(); // Track worker processes by ID
-    this.currentWorkerCount = 0;
+    this.dockerMode = process.env.DOCKER_SCALE === 'true';
+    this.currentWorkerCount = this.minWorkers; // Start with minimum workers
   }
 
   /**
@@ -40,6 +40,7 @@ class QueueMonitorService {
 
     try {
       console.log('Starting queue monitor service...');
+      console.log(`Docker mode: ${this.dockerMode ? 'enabled' : 'disabled'}`);
       
       // Connect to RabbitMQ
       this.connection = await amqp.connect(this.rabbitMqUrl);
@@ -106,9 +107,6 @@ class QueueMonitorService {
       console.error('Error closing connection:', error);
     }
     
-    // Stop all worker processes
-    await this.stopAllWorkers();
-    
     this.isRunning = false;
     console.log('Queue monitor service stopped');
   }
@@ -156,8 +154,24 @@ class QueueMonitorService {
    * Ensure the minimum number of workers are running
    */
   async ensureMinimumWorkers() {
-    if (this.currentWorkerCount < this.minWorkers) {
-      await this.scaleUp(this.minWorkers - this.currentWorkerCount);
+    try {
+      if (this.dockerMode) {
+        // For Docker, check current scale
+        const { stdout } = await execPromise('docker-compose ps -q loadsure-service | wc -l');
+        const currentWorkers = parseInt(stdout.trim(), 10);
+        this.currentWorkerCount = currentWorkers;
+        
+        if (currentWorkers < this.minWorkers) {
+          await this.scaleUp(this.minWorkers - currentWorkers);
+        }
+      } else {
+        // In non-Docker mode, scale to minimum directly
+        if (this.currentWorkerCount < this.minWorkers) {
+          await this.scaleUp(this.minWorkers - this.currentWorkerCount);
+        }
+      }
+    } catch (error) {
+      console.error('Error ensuring minimum workers:', error);
     }
   }
 
@@ -168,46 +182,31 @@ class QueueMonitorService {
   async scaleUp(count) {
     console.log(`Scaling up: adding ${count} workers`);
     
-    for (let i = 0; i < count; i++) {
-      const workerId = `worker-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-      
-      try {
-        // In production, would use Docker or K8s APIs to start new containers
-        // For local development, we'll just spawn new Node processes
+    try {
+      if (this.dockerMode) {
+        // For Docker environments, use docker-compose scale
+        const targetWorkers = this.currentWorkerCount + count;
+        console.log(`Scaling loadsure-service to ${targetWorkers} workers via Docker`);
         
-        // For Docker environments:
-        if (process.env.DOCKER_SCALE === 'true') {
-          await execPromise(
-            `docker-compose up -d --scale loadsure-service=$((${this.currentWorkerCount + 1}))`
-          );
-        } else {
-          // For local development, spawn a Node process
-          const { spawn } = await import('child_process');
-          
-          const workerProcess = spawn('node', ['src/services/loadsureService.js'], {
-            env: { ...process.env, WORKER_ID: workerId },
-            detached: true,
-            stdio: 'inherit'
-          });
-          
-          // Keep track of the worker process
-          this.workerProcesses.set(workerId, workerProcess);
-          
-          workerProcess.on('exit', (code) => {
-            console.log(`Worker ${workerId} exited with code ${code}`);
-            this.workerProcesses.delete(workerId);
-            this.currentWorkerCount--;
-            
-            // Ensure minimum workers
-            this.ensureMinimumWorkers();
-          });
+        // Using docker-compose with deploy mode needs service update
+        const { stdout, stderr } = await execPromise(
+          `docker-compose up -d --scale loadsure-service=${targetWorkers}`
+        );
+        
+        console.log('Scale up output:', stdout);
+        if (stderr) {
+          console.error('Scale up error:', stderr);
         }
         
-        this.currentWorkerCount++;
-        console.log(`Worker ${workerId} started (total: ${this.currentWorkerCount})`);
-      } catch (error) {
-        console.error(`Error starting worker ${workerId}:`, error);
+        this.currentWorkerCount = targetWorkers;
+        console.log(`New worker count: ${this.currentWorkerCount}`);
+      } else {
+        console.log('Non-Docker scaling not implemented in this version');
+        // For local environment, we would spawn new processes here
+        this.currentWorkerCount += count;
       }
+    } catch (error) {
+      console.error('Error scaling up workers:', error);
     }
   }
 
@@ -221,56 +220,31 @@ class QueueMonitorService {
     const actualCount = Math.min(count, this.currentWorkerCount - this.minWorkers);
     console.log(`Scaling down: removing ${actualCount} workers`);
     
-    // For Docker environments:
-    if (process.env.DOCKER_SCALE === 'true') {
-      await execPromise(
-        `docker-compose up -d --scale loadsure-service=$((${this.currentWorkerCount - actualCount}))`
-      );
-      this.currentWorkerCount -= actualCount;
-    } else {
-      // For local development, stop Node processes
-      // Get the most recent workers (last added, first removed - LIFO)
-      const workerIds = [...this.workerProcesses.keys()];
-      const workersToStop = workerIds.slice(-actualCount);
-      
-      for (const workerId of workersToStop) {
-        const workerProcess = this.workerProcesses.get(workerId);
+    try {
+      if (this.dockerMode) {
+        // For Docker environments, use docker-compose scale
+        const targetWorkers = this.currentWorkerCount - actualCount;
+        console.log(`Scaling loadsure-service to ${targetWorkers} workers via Docker`);
         
-        try {
-          console.log(`Stopping worker ${workerId}...`);
-          // Send SIGTERM signal to let the process exit gracefully
-          process.kill(-workerProcess.pid, 'SIGTERM');
-          
-          // Clean up tracking
-          this.workerProcesses.delete(workerId);
-          this.currentWorkerCount--;
-          
-          console.log(`Worker ${workerId} stopped (total: ${this.currentWorkerCount})`);
-        } catch (error) {
-          console.error(`Error stopping worker ${workerId}:`, error);
+        const { stdout, stderr } = await execPromise(
+          `docker-compose up -d --scale loadsure-service=${targetWorkers}`
+        );
+        
+        console.log('Scale down output:', stdout);
+        if (stderr) {
+          console.error('Scale down error:', stderr);
         }
+        
+        this.currentWorkerCount = targetWorkers;
+        console.log(`New worker count: ${this.currentWorkerCount}`);
+      } else {
+        console.log('Non-Docker scaling not implemented in this version');
+        // For local environment, we would stop processes here
+        this.currentWorkerCount -= actualCount;
       }
+    } catch (error) {
+      console.error('Error scaling down workers:', error);
     }
-  }
-
-  /**
-   * Stop all worker processes
-   */
-  async stopAllWorkers() {
-    console.log(`Stopping all ${this.currentWorkerCount} workers...`);
-    
-    for (const [workerId, workerProcess] of this.workerProcesses.entries()) {
-      try {
-        process.kill(-workerProcess.pid, 'SIGTERM');
-        this.workerProcesses.delete(workerId);
-        console.log(`Worker ${workerId} stopped`);
-      } catch (error) {
-        console.error(`Error stopping worker ${workerId}:`, error);
-      }
-    }
-    
-    this.currentWorkerCount = 0;
-    console.log('All workers stopped');
   }
 }
 
