@@ -41,6 +41,8 @@
   </template>
   
   <script>
+  import emitter from '../eventBus.js';
+
   export default {
     name: 'BookingConfirmation',
     props: {
@@ -66,6 +68,7 @@
       
       startNewQuote() {
         this.$emit('start-new-quote');
+        emitter.emit('insurance-canceled');
       }
     }
   };

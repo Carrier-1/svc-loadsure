@@ -129,6 +129,7 @@ import QuoteDisplay from './QuoteDisplay.vue';
 import BookingConfirmation from './BookingConfirmation.vue';
 import CertificateDisplay from './CertificateDisplay.vue';
 import CertificateLookup from './CertificateLookup.vue';
+import emitter from '../eventBus.js';
 
 export default {
   name: 'InsuranceFormContainer',
@@ -617,10 +618,12 @@ export default {
           this.quote = data.quote;
           
           // Emit event to update the parent component with insurance info
-          this.$root.$emit('insurance-selected', {
+          emitter.emit('insurance-selected', {
             premium: data.quote.premium,
             integrationFeeAmount: data.quote.integrationFeeAmount
           });
+        } else if (data.status === 'error') {
+          this.apiError = data.error || 'An error occurred while getting the quote';
         } else {
           throw new Error('Invalid quote response');
         }
@@ -725,7 +728,7 @@ export default {
       this.quote = null;
       
       // Emit event to update the parent component
-      this.$root.$emit('insurance-canceled');
+      emitter.emit('insurance-canceled');
     },
     
     resetForm() {
@@ -844,7 +847,7 @@ export default {
       }
       
       // Emit event to update the parent component
-      this.$root.$emit('insurance-canceled');
+      emitter.emit('insurance-canceled');
     },
     
     // Generate payload for API

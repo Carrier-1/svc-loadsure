@@ -54,6 +54,8 @@
   </template>
   
   <script>
+  import emitter from '../eventBus.js';
+  
   export default {
     name: 'CertificateDisplay',
     props: {
@@ -93,6 +95,7 @@
       
       startNewQuote() {
         this.$emit('start-new-quote');
+        emitter.emit('insurance-canceled');
       }
     }
   };

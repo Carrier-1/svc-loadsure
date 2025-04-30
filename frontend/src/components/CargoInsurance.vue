@@ -8,6 +8,7 @@
 
 <script>
 import InsuranceFormContainer from './InsuranceFormContainer.vue';
+import emitter from '../eventBus.js';
 
 export default {
   name: 'CargoInsurance',
@@ -18,7 +19,7 @@ export default {
     // Handle insurance selection - emit event to parent component
     handleQuoteCreated(data) {
       this.$emit('quote-created');
-      this.$emit('insurance-selected', data);
+      emitter.emit('insurance-selected', data);
     },
     
     // Public method to populate form from a quote

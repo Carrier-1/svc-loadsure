@@ -97,6 +97,8 @@
   </template>
   
   <script>
+  import emitter from '../eventBus.js';
+
   export default {
     name: 'QuoteDisplay',
     props: {
@@ -136,6 +138,7 @@
       
       cancelQuote() {
         this.$emit('cancel-quote');
+        emitter.emit('insurance-canceled');
       }
     }
   };
