@@ -1,111 +1,182 @@
-# Makefile for Docker Compose project
+# Loadsure Insurance Integration Makefile
+# This file provides shortcuts for common Docker operations
 
-# Variables
-COMPOSE_FILE = docker-compose.yml
-COMPOSE_DEV_FILE = docker-compose.dev.yml
-SERVICES = api-service loadsure-service frontend db-setup
+# Default environment variables
+ENV ?= dev
+COMPOSE_FILE := docker-compose.yml
+ifeq ($(ENV),dev)
+	COMPOSE_FILE := docker-compose.dev.yml
+endif
 
-# Set BuildKit environment variables
-export DOCKER_BUILDKIT=1
-export COMPOSE_DOCKER_CLI_BUILD=1
+# Container organization
+PROJECT_NAME := loadsure-insurance
 
 # Default target
-.PHONY: all
-all: build up
+.PHONY: help
+help:
+	@echo "Loadsure Insurance Integration Commands:"
+	@echo ""
+	@echo "Environment Management:"
+	@echo "  make up              # Start all services (default: dev environment)"
+	@echo "  make up ENV=prod     # Start all services in production mode"
+	@echo "  make down            # Stop all services"
+	@echo "  make restart         # Restart all services"
+	@echo ""
+	@echo "Development Shortcuts:"
+	@echo "  make dev             # Start development environment"
+	@echo "  make prod            # Start production environment"
+	@echo "  make rebuild-changed # Rebuild and restart only services with changed files"
+	@echo ""
+	@echo "Container Management:"
+	@echo "  make build           # Build all containers"
+	@echo "  make build-parallel  # Build all containers in parallel"
+	@echo "  make pull            # Pull latest images"
+	@echo "  make clean           # Remove node_modules directories and temporary files"
+	@echo "  make clean-all       # Remove all containers, networks, volumes, and node_modules"
+	@echo ""
+	@echo "Service-specific Commands:"
+	@echo "  make frontend        # Build and start only the frontend"
+	@echo "  make backend         # Build and start only the backend services"
+	@echo "  make db              # Start only the database"
+	@echo "  make migrate         # Run database migrations"
+	@echo ""
+	@echo "Logs:"
+	@echo "  make logs            # View logs from all services"
+	@echo "  make logs-api        # View logs from API service"
+	@echo "  make logs-frontend   # View logs from frontend"
+	@echo ""
+	@echo "Utilities:"
+	@echo "  make status          # Show status of all containers"
+	@echo "  make ps              # Alias for status"
+	@echo "  make prune           # Remove unused Docker resources"
 
-# Build all services
-.PHONY: build
-build:
-	docker-compose -f $(COMPOSE_FILE) build --parallel
+# Environment shortcuts
+.PHONY: dev prod
+dev:
+	@echo "Starting development environment..."
+	@$(MAKE) ENV=dev up
 
-# Build specific services
-.PHONY: build-api
-build-api:
-	docker-compose -f $(COMPOSE_FILE) build api-service
+prod:
+	@echo "Starting production environment..."
+	@$(MAKE) ENV=prod up
 
-.PHONY: build-loadsure
-build-loadsure:
-	docker-compose -f $(COMPOSE_FILE) build loadsure-service
-
-.PHONY: build-frontend
-build-frontend:
-	docker-compose -f $(COMPOSE_FILE) build frontend
-
-# Start all services
-.PHONY: up
+# Core Docker commands
+.PHONY: up down restart build build-parallel pull
 up:
+	@echo "Starting services with $(COMPOSE_FILE)..."
 	docker-compose -f $(COMPOSE_FILE) up -d
 
-# Start development environment
-.PHONY: dev
-dev:
-	docker-compose -f $(COMPOSE_FILE) -f $(COMPOSE_DEV_FILE) up -d
-
-# Stop all services
-.PHONY: down
 down:
+	@echo "Stopping services..."
 	docker-compose -f $(COMPOSE_FILE) down
 
-# View logs
-.PHONY: logs
+restart:
+	@echo "Restarting services..."
+	docker-compose -f $(COMPOSE_FILE) restart
+
+build:
+	@echo "Building containers..."
+	docker-compose -f $(COMPOSE_FILE) build
+
+build-parallel:
+	@echo "Building containers in parallel..."
+	docker-compose -f $(COMPOSE_FILE) build --parallel
+
+pull:
+	@echo "Pulling latest images..."
+	docker-compose -f $(COMPOSE_FILE) pull
+
+# Service-specific commands
+.PHONY: frontend backend db migrate
+frontend:
+	@echo "Starting frontend service..."
+	docker-compose -f $(COMPOSE_FILE) up -d --build frontend
+
+backend:
+	@echo "Starting backend services..."
+	docker-compose -f $(COMPOSE_FILE) up -d --build api-service loadsure-service
+
+db:
+	@echo "Starting database services..."
+	docker-compose -f $(COMPOSE_FILE) up -d postgres rabbitmq
+	@echo "Waiting for database to be ready..."
+	@sleep 5
+	docker-compose -f $(COMPOSE_FILE) up db-setup
+
+migrate:
+	@echo "Running database migrations..."
+	docker-compose -f $(COMPOSE_FILE) run --rm db-setup
+
+# Intelligent rebuild - detects which services need rebuilding based on changed files
+.PHONY: rebuild-changed
+rebuild-changed:
+	@echo "Checking for changed files..."
+	@if [ -n "$$(git diff --name-only HEAD | grep -E '^frontend/')" ]; then \
+		echo "Frontend changes detected. Rebuilding frontend..."; \
+		docker-compose -f $(COMPOSE_FILE) up -d --build frontend; \
+	fi
+	@if [ -n "$$(git diff --name-only HEAD | grep -E '^backend/')" ]; then \
+		echo "Backend changes detected. Rebuilding backend services..."; \
+		docker-compose -f $(COMPOSE_FILE) up -d --build --parallel api-service loadsure-service; \
+	fi
+	@if [ -n "$$(git diff --name-only HEAD | grep -E '^backend/database/migrations/')" ]; then \
+		echo "Migration changes detected. Running migrations..."; \
+		docker-compose -f $(COMPOSE_FILE) run --rm db-setup npx sequelize-cli db:migrate; \
+	fi
+	@if [ -n "$$(git diff --name-only HEAD | grep -E 'docker-compose|Dockerfile|nginx')" ]; then \
+		echo "Docker configuration changes detected. Rebuilding all services..."; \
+		docker-compose -f $(COMPOSE_FILE) up -d --build --parallel; \
+	fi
+	@if [ -z "$$(git diff --name-only HEAD | grep -E '^frontend/|^backend/|docker-compose|Dockerfile|nginx')" ]; then \
+		echo "No relevant changes detected."; \
+	fi
+
+# Log commands
+.PHONY: logs logs-api logs-frontend
 logs:
 	docker-compose -f $(COMPOSE_FILE) logs -f
 
-# Clean Docker resources
-.PHONY: clean
+logs-api:
+	docker-compose -f $(COMPOSE_FILE) logs -f api-service
+
+logs-frontend:
+	docker-compose -f $(COMPOSE_FILE) logs -f frontend
+
+# Cleanup commands
+.PHONY: clean clean-all
 clean:
-	docker system prune -f
-
-# Deep clean Docker resources (careful!)
-.PHONY: clean-all
-clean-all:
-	docker system prune -a -f
-	docker volume prune -f
-
-# Selective rebuild based on git changes
-.PHONY: rebuild-changed
-rebuild-changed:
-	@CHANGED_DIRS=""; \
-	if [ -n "$$(git diff --name-only HEAD HEAD~1 -- ./frontend)" ]; then \
-		CHANGED_DIRS="$$CHANGED_DIRS frontend"; \
-	fi; \
-	if [ -n "$$(git diff --name-only HEAD HEAD~1 -- ./backend)" ]; then \
-		CHANGED_DIRS="$$CHANGED_DIRS api-service loadsure-service"; \
-	fi; \
-	if [ -z "$$CHANGED_DIRS" ]; then \
-		echo "No changes detected in service directories"; \
+	@echo "Cleaning node_modules folders and temporary files..."
+	@if [ -f "cleanup.sh" ]; then \
+		sh cleanup.sh; \
 	else \
-		echo "Rebuilding: $$CHANGED_DIRS"; \
-		docker-compose -f $(COMPOSE_FILE) build $$CHANGED_DIRS; \
-		docker-compose -f $(COMPOSE_FILE) up -d $$CHANGED_DIRS; \
+		rm -rf node_modules; \
+		rm -rf frontend/node_modules; \
+		rm -rf backend/node_modules; \
 	fi
+	@echo "Removing temporary files..."
+	@find . -name "*.log" -type f -delete
+	@find . -name ".DS_Store" -type f -delete
+	@find . -name "*.tmp" -type f -delete
+	@echo "Cleanup complete!"
 
-# Run database migrations
-.PHONY: migrate
-migrate:
-	docker-compose -f $(COMPOSE_FILE) run --rm api-service npm run migrate
+clean-all:
+	@echo "Stopping all containers..."
+	docker-compose -f $(COMPOSE_FILE) down -v
+	@echo "Removing volumes..."
+	docker volume prune -f
+	@echo "Removing node_modules and temporary files..."
+	@$(MAKE) clean
+	@echo "Pruning unused Docker resources..."
+	docker system prune -f
+	@echo "Deep clean complete!"
 
-# Check status
-.PHONY: status
+# Utility commands
+.PHONY: status ps prune
 status:
 	docker-compose -f $(COMPOSE_FILE) ps
 
-# Help
-.PHONY: help
-help:
-	@echo "Available targets:"
-	@echo "  all              - Build and start all services (default)"
-	@echo "  build            - Build all Docker images"
-	@echo "  build-api        - Build only API service"
-	@echo "  build-loadsure   - Build only Loadsure service"
-	@echo "  build-frontend   - Build only frontend service"
-	@echo "  up               - Start all services"
-	@echo "  dev              - Start development environment"
-	@echo "  down             - Stop all services"
-	@echo "  logs             - View logs"
-	@echo "  clean            - Clean unused Docker resources"
-	@echo "  clean-all        - Deep clean Docker resources (careful!)"
-	@echo "  rebuild-changed  - Selectively rebuild services with changes"
-	@echo "  migrate          - Run database migrations"
-	@echo "  status           - Check status of services"
-	@echo "  help             - Show this help message"
+ps: status
+
+prune:
+	@echo "Removing unused Docker resources..."
+	docker system prune -f

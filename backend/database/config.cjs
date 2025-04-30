@@ -33,12 +33,12 @@ module.exports = {
   production: {
     ...baseConfig,
     logging: false,
-    dialectOptions: {
+    dialectOptions: process.env.DB_SSL === 'true' ? {
       ssl: {
-        require: process.env.DB_SSL === 'true',
+        require: true,
         rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false'
       }
-    },
+    } : {},
     pool: {
       max: 5,
       min: 0,
