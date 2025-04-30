@@ -4,16 +4,26 @@
 # Default environment variables
 ENV ?= dev
 NODE_ENV ?= development
-COMPOSE_FILE := docker-compose.yml
+
+# Set compose files based on environment
 ifeq ($(ENV),dev)
-	COMPOSE_FILE := docker-compose.dev.yml
+	COMPOSE_FILES := -f docker-compose.yml -f docker-compose.dev.yml
 	NODE_ENV := development
+	export DB_NAME=loadsure_dev
 else ifeq ($(ENV),prod)
+	COMPOSE_FILES := -f docker-compose.yml
 	NODE_ENV := production
+	export DB_NAME=loadsure
+else
+	COMPOSE_FILES := -f docker-compose.yml
 endif
 
 # Container organization
 PROJECT_NAME := loadsure-insurance
+
+# Export environment variables
+export NODE_ENV
+export DB_NAME
 
 # Default target
 .PHONY: help
@@ -53,6 +63,8 @@ help:
 	@echo "  make status          # Show status of all containers"
 	@echo "  make ps              # Alias for status"
 	@echo "  make prune           # Remove unused Docker resources"
+	@echo ""
+	@echo "Current Environment: $(ENV) (DB: $(DB_NAME), NODE_ENV: $(NODE_ENV))"
 
 # Environment shortcuts
 .PHONY: dev prod
@@ -67,49 +79,49 @@ prod:
 # Core Docker commands
 .PHONY: up down restart build build-parallel pull
 up:
-	@echo "Starting services with $(COMPOSE_FILE)..."
-	NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) up -d
+	@echo "Starting services with $(COMPOSE_FILES)..."
+	docker-compose $(COMPOSE_FILES) up -d
 
 down:
 	@echo "Stopping services..."
-	docker-compose -f $(COMPOSE_FILE) down
+	docker-compose $(COMPOSE_FILES) down
 
 restart:
 	@echo "Restarting services..."
-	NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) restart
+	docker-compose $(COMPOSE_FILES) restart
 
 build:
 	@echo "Building containers..."
-	NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) build
+	docker-compose $(COMPOSE_FILES) build
 
 build-parallel:
 	@echo "Building containers in parallel..."
-	NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) build --parallel
+	docker-compose $(COMPOSE_FILES) build --parallel
 
 pull:
 	@echo "Pulling latest images..."
-	docker-compose -f $(COMPOSE_FILE) pull
+	docker-compose $(COMPOSE_FILES) pull
 
 # Service-specific commands
 .PHONY: frontend backend db migrate
 frontend:
 	@echo "Starting frontend service..."
-	NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) up -d --build frontend
+	docker-compose $(COMPOSE_FILES) up -d --build frontend
 
 backend:
 	@echo "Starting backend services..."
-	NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) up -d --build api-service loadsure-service
+	docker-compose $(COMPOSE_FILES) up -d --build api-service loadsure-service
 
 db:
 	@echo "Starting database services..."
-	docker-compose -f $(COMPOSE_FILE) up -d postgres rabbitmq
+	docker-compose $(COMPOSE_FILES) up -d postgres rabbitmq
 	@echo "Waiting for database to be ready..."
 	@sleep 5
-	docker-compose -f $(COMPOSE_FILE) up db-setup
+	docker-compose $(COMPOSE_FILES) up db-setup
 
 migrate:
 	@echo "Running database migrations..."
-	docker-compose -f $(COMPOSE_FILE) run --rm db-setup
+	docker-compose $(COMPOSE_FILES) run --rm db-setup
 
 # Intelligent rebuild - detects which services need rebuilding based on changed files
 .PHONY: rebuild-changed
@@ -117,19 +129,19 @@ rebuild-changed:
 	@echo "Checking for changed files..."
 	@if [ -n "$$(git diff --name-only HEAD | grep -E '^frontend/')" ]; then \
 		echo "Frontend changes detected. Rebuilding frontend..."; \
-		NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) up -d --build frontend; \
+		docker-compose $(COMPOSE_FILES) up -d --build frontend; \
 	fi
 	@if [ -n "$$(git diff --name-only HEAD | grep -E '^backend/')" ]; then \
 		echo "Backend changes detected. Rebuilding backend services..."; \
-		NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) up -d --build --no-deps api-service loadsure-service; \
+		docker-compose $(COMPOSE_FILES) up -d --build --no-deps api-service loadsure-service; \
 	fi
 	@if [ -n "$$(git diff --name-only HEAD | grep -E '^backend/database/migrations/')" ]; then \
 		echo "Migration changes detected. Running migrations..."; \
-		docker-compose -f $(COMPOSE_FILE) run --rm db-setup npx sequelize-cli db:migrate; \
+		docker-compose $(COMPOSE_FILES) run --rm db-setup npx sequelize-cli db:migrate; \
 	fi
 	@if [ -n "$$(git diff --name-only HEAD | grep -E 'docker-compose|Dockerfile|nginx')" ]; then \
 		echo "Docker configuration changes detected. Rebuilding all services..."; \
-		NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) up -d --build; \
+		docker-compose $(COMPOSE_FILES) up -d --build; \
 	fi
 	@if [ -z "$$(git diff --name-only HEAD | grep -E '^frontend/|^backend/|docker-compose|Dockerfile|nginx')" ]; then \
 		echo "No relevant changes detected."; \
@@ -138,13 +150,13 @@ rebuild-changed:
 # Log commands
 .PHONY: logs logs-api logs-frontend
 logs:
-	docker-compose -f $(COMPOSE_FILE) logs -f
+	docker-compose $(COMPOSE_FILES) logs -f
 
 logs-api:
-	docker-compose -f $(COMPOSE_FILE) logs -f api-service
+	docker-compose $(COMPOSE_FILES) logs -f api-service
 
 logs-frontend:
-	docker-compose -f $(COMPOSE_FILE) logs -f frontend
+	docker-compose $(COMPOSE_FILES) logs -f frontend
 
 # Cleanup commands
 .PHONY: clean clean-all
@@ -165,7 +177,7 @@ clean:
 
 clean-all:
 	@echo "Stopping all containers..."
-	docker-compose -f $(COMPOSE_FILE) down -v
+	docker-compose $(COMPOSE_FILES) down -v
 	@echo "Removing volumes..."
 	docker volume prune -f
 	@echo "Removing node_modules and temporary files..."
@@ -177,7 +189,7 @@ clean-all:
 # Utility commands
 .PHONY: status ps prune
 status:
-	docker-compose -f $(COMPOSE_FILE) ps
+	docker-compose $(COMPOSE_FILES) ps
 
 ps: status
 
