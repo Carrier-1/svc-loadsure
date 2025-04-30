@@ -49,7 +49,7 @@ services:
       dockerfile: Dockerfile
       # Add cache mounting for faster builds
       cache_from:
-        - node:23-alpine
+        - node:18-alpine
     environment:
       - DB_DIALECT=postgres
       - DB_HOST=postgres
@@ -75,7 +75,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       cache_from:
-        - node:23-alpine
+        - node:18-alpine
     ports:
       - "3000:3000"
     environment:
@@ -106,7 +106,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       cache_from:
-        - node:23-alpine
+        - node:18-alpine
     environment:
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
       - LOADSURE_API_KEY=MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN

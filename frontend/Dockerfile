@@ -1,5 +1,5 @@
 # Optimize dependencies installation and build caching
-FROM node:23-alpine as build-stage
+FROM node:18-alpine AS build-stage
 
 WORKDIR /app
 
