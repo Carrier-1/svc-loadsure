@@ -1,25 +1,16 @@
-# Optimize dependencies installation and build caching
-FROM node:18-alpine AS build-stage
+FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files first and install dependencies
-# This layer will be cached unless package files change
+# Copy package files
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
-# Copy only necessary source files for building
-COPY .eslintrc* ./ 
-COPY babel.config.js ./
-COPY src/ ./src/
-COPY public/ ./public/
+# Copy source code (for production build)
+COPY . .
 
-# Build the app
-RUN npm run build
+# Expose ports for both dev and prod
+EXPOSE 8080 80
 
-# Production stage with Nginx
-FROM nginx:stable-alpine AS production-stage
-COPY --from=build-stage /app/dist /usr/share/nginx/html
-
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+# Use a command that works for both dev and prod
+CMD ["sh", "-c", "if [ \"$NODE_ENV\" = \"production\" ]; then npm run build && npm run serve; else npm run serve; fi"]

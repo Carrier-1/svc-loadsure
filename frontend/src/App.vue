@@ -144,6 +144,7 @@
 
 <script>
 import InsuranceNavigator from './components/InsuranceNavigator.vue';
+import emitter from './eventBus.js';
 
 export default {
   name: 'App',
@@ -184,7 +185,7 @@ export default {
   },
   mounted() {
     // Listen for insurance cancellation
-    this.$root.$on('insurance-canceled', () => {
+    emitter.on('insurance-canceled', () => {
       this.insuranceSelected = false;
       this.insuranceAmount = 'TBD';
       this.integrationFeeAmount = 0;
@@ -192,7 +193,7 @@ export default {
   },
   beforeUnmount() {
     // Clean up event listeners
-    this.$root.$off('insurance-canceled');
+    emitter.off('insurance-canceled');
   },
   methods: {
     // Method to handle insurance selection updates

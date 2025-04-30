@@ -3,9 +3,13 @@
 
 # Default environment variables
 ENV ?= dev
+NODE_ENV ?= development
 COMPOSE_FILE := docker-compose.yml
 ifeq ($(ENV),dev)
 	COMPOSE_FILE := docker-compose.dev.yml
+	NODE_ENV := development
+else ifeq ($(ENV),prod)
+	NODE_ENV := production
 endif
 
 # Container organization
@@ -64,7 +68,7 @@ prod:
 .PHONY: up down restart build build-parallel pull
 up:
 	@echo "Starting services with $(COMPOSE_FILE)..."
-	docker-compose -f $(COMPOSE_FILE) up -d
+	NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) up -d
 
 down:
 	@echo "Stopping services..."
@@ -72,15 +76,15 @@ down:
 
 restart:
 	@echo "Restarting services..."
-	docker-compose -f $(COMPOSE_FILE) restart
+	NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) restart
 
 build:
 	@echo "Building containers..."
-	docker-compose -f $(COMPOSE_FILE) build
+	NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) build
 
 build-parallel:
 	@echo "Building containers in parallel..."
-	docker-compose -f $(COMPOSE_FILE) build --parallel
+	NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) build --parallel
 
 pull:
 	@echo "Pulling latest images..."
@@ -90,11 +94,11 @@ pull:
 .PHONY: frontend backend db migrate
 frontend:
 	@echo "Starting frontend service..."
-	docker-compose -f $(COMPOSE_FILE) up -d --build frontend
+	NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) up -d --build frontend
 
 backend:
 	@echo "Starting backend services..."
-	docker-compose -f $(COMPOSE_FILE) up -d --build api-service loadsure-service
+	NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) up -d --build api-service loadsure-service
 
 db:
 	@echo "Starting database services..."
@@ -113,11 +117,11 @@ rebuild-changed:
 	@echo "Checking for changed files..."
 	@if [ -n "$$(git diff --name-only HEAD | grep -E '^frontend/')" ]; then \
 		echo "Frontend changes detected. Rebuilding frontend..."; \
-		docker-compose -f $(COMPOSE_FILE) up -d --build frontend; \
+		NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) up -d --build frontend; \
 	fi
 	@if [ -n "$$(git diff --name-only HEAD | grep -E '^backend/')" ]; then \
 		echo "Backend changes detected. Rebuilding backend services..."; \
-		docker-compose -f $(COMPOSE_FILE) up -d --build --parallel api-service loadsure-service; \
+		NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) up -d --build --no-deps api-service loadsure-service; \
 	fi
 	@if [ -n "$$(git diff --name-only HEAD | grep -E '^backend/database/migrations/')" ]; then \
 		echo "Migration changes detected. Running migrations..."; \
@@ -125,7 +129,7 @@ rebuild-changed:
 	fi
 	@if [ -n "$$(git diff --name-only HEAD | grep -E 'docker-compose|Dockerfile|nginx')" ]; then \
 		echo "Docker configuration changes detected. Rebuilding all services..."; \
-		docker-compose -f $(COMPOSE_FILE) up -d --build --parallel; \
+		NODE_ENV=$(NODE_ENV) docker-compose -f $(COMPOSE_FILE) up -d --build; \
 	fi
 	@if [ -z "$$(git diff --name-only HEAD | grep -E '^frontend/|^backend/|docker-compose|Dockerfile|nginx')" ]; then \
 		echo "No relevant changes detected."; \

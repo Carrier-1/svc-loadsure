@@ -36,7 +36,7 @@ services:
   db-setup:
       build:
         context: ./backend
-        dockerfile: Dockerfile.dev
+        dockerfile: Dockerfile
       environment:
         - NODE_ENV=development
         - DB_DIALECT=postgres
@@ -63,7 +63,7 @@ services:
   api-service:
       build:
         context: ./backend
-        dockerfile: Dockerfile.dev
+        dockerfile: Dockerfile
       ports:
         - "3000:3000"
       environment:
@@ -100,7 +100,7 @@ services:
   loadsure-service:
       build:
         context: ./backend
-        dockerfile: Dockerfile.dev
+        dockerfile: Dockerfile
       environment:
         - NODE_ENV=development
         - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
@@ -125,7 +125,7 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     volumes:
@@ -135,6 +135,8 @@ services:
       - NODE_ENV=development
     depends_on:
       - api-service
+      - loadsure-service
+    command: npm run serve  # Should be running the Vue dev server
 
 volumes:
   rabbitmq_data_dev:
