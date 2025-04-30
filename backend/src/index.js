@@ -1,13 +1,14 @@
-// backend/src/index.js - with Swagger integration
 import express from 'express';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 import * as amqp from 'amqplib';
 import config from './config.js';
+import createRateLimiter from './middleware/rateLimiter.js';
 
 // Import services
 import supportDataService from './services/supportDataService.js';
 import supportDataRefreshService from './services/supportDataRefreshService.js';
+import QueueMonitorService from './services/queueMonitorService.js';
 
 // Import controllers
 import supportDataController from './controllers/supportDataController.js';
@@ -20,6 +21,32 @@ import { setupSwagger } from './swagger.js';
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Create and apply rate limiter middleware
+const rateLimiter = createRateLimiter({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10), // 1 minute
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10), // 100 requests per window
+});
+
+// Apply rate limiting to all routes
+app.use(rateLimiter);
+
+// Add request ID middleware
+app.use((req, res, next) => {
+  req.id = req.headers['x-request-id'] || uuidv4();
+  res.setHeader('X-Request-ID', req.id);
+  next();
+});
+
+// Add basic logging middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms [${req.id}]`);
+  });
+  next();
+});
 
 // In-memory storage (replace with a database in production)
 const pendingRequests = new Map();
@@ -242,6 +269,11 @@ async function startServer() {
     // Register controllers
     app.use('/api/support-data', supportDataController);
     app.use('/api/insurance', insuranceController.router);
+
+    // Add a health check endpoint (not rate limited)
+    app.get('/health', (req, res) => {
+      res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    });
     
     // Setup Swagger documentation
     setupSwagger(app);
@@ -251,6 +283,22 @@ async function startServer() {
       console.log(`Loadsure Insurance Microservice API running on port ${config.PORT}`);
       console.log(`Swagger documentation available at http://localhost:${config.PORT}/api-docs`);
     });
+        
+    // Start queue monitor service if enabled in environment
+    if (process.env.ENABLE_QUEUE_MONITOR === 'true') {
+      console.log('Starting queue monitor service...');
+      const queueMonitor = new QueueMonitorService({
+        rabbitMqUrl: config.RABBITMQ_URL,
+        queues: [
+          config.QUEUE_QUOTE_REQUESTED,
+          config.QUEUE_BOOKING_REQUESTED
+        ],
+        minWorkers: parseInt(process.env.MIN_WORKERS || '1', 10),
+        maxWorkers: parseInt(process.env.MAX_WORKERS || '5', 10)
+      });
+      
+      await queueMonitor.start();
+    }
   } catch (error) {
     console.error('Failed to start services:', error);
     process.exit(1);

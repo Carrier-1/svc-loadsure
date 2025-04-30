@@ -5,17 +5,30 @@ import config from '../config.js';
 import LoadsureApiService from './loadsureApiService.js';
 import DatabaseService from './databaseService.js';
 
+// Set default concurrency level from environment or config
+const WORKER_CONCURRENCY = parseInt(process.env.WORKER_CONCURRENCY || '3', 10);
+const WORKER_ID = process.env.WORKER_ID || `worker-${process.pid}`;
+
+// Track active consumers for graceful shutdown
+const activeConsumers = {
+  quotes: null,
+  bookings: null
+};
+
 /**
  * Main service for handling Loadsure integration through message queues
+ * with improved concurrency handling
  */
 async function startService() {
   try {
+    console.log(`Loadsure Service [${WORKER_ID}]: Starting with concurrency ${WORKER_CONCURRENCY}`);
     console.log('Loadsure Service: Connecting to RabbitMQ...');
     const connection = await amqp.connect(config.RABBITMQ_URL);
     const channel = await connection.createChannel();
-    
-    // Set prefetch to 1 to ensure we only process one message at a time
-    channel.prefetch(1);
+
+    // Set prefetch based on concurrency - this controls how many messages
+    // can be processed concurrently by this service instance
+    channel.prefetch(WORKER_CONCURRENCY);
     
     // Ensure queues exist
     await channel.assertQueue(config.QUEUE_QUOTE_REQUESTED, { durable: true });
@@ -23,7 +36,7 @@ async function startService() {
     await channel.assertQueue(config.QUEUE_BOOKING_REQUESTED, { durable: true });
     await channel.assertQueue(config.QUEUE_BOOKING_CONFIRMED, { durable: true });
     
-    console.log('Loadsure Service: RabbitMQ connection established');
+    console.log(`Loadsure Service [${WORKER_ID}]: RabbitMQ connection established`);
     
     // Initialize database
     await DatabaseService.initialize();
@@ -33,10 +46,16 @@ async function startService() {
       config.LOADSURE_API_KEY,
       config.LOADSURE_BASE_URL
     );
+
+    // Track active jobs for more accurate concurrency control
+    let activeJobs = 0;
     
     // Process quote requests
-    await channel.consume(config.QUEUE_QUOTE_REQUESTED, async (msg) => {
+    const quoteConsumer = await channel.consume(config.QUEUE_QUOTE_REQUESTED, async (msg) => {
       if (msg !== null) {
+        activeJobs++;
+        const startTime = Date.now();
+        
         try {
           const data = JSON.parse(msg.content.toString());
           console.log(`Processing quote request: ${data.requestId}`);
@@ -69,7 +88,8 @@ async function startService() {
             { persistent: true }
           );
           
-          console.log(`Quote received event published for request: ${data.requestId}`);
+          const processingTime = Date.now() - startTime;
+          console.log(`Quote received event published for request: ${data.requestId} (took ${processingTime}ms)`);
           
           // Only acknowledge the message AFTER saving to database and publishing event
           channel.ack(msg);
@@ -102,13 +122,20 @@ async function startService() {
               console.error('Error parsing message content:', parseError);
             }
           }
+        } finally {
+          activeJobs--;
+          const processingTime = Date.now() - startTime;
+          console.log(`Quote request processed in ${processingTime}ms, active jobs: ${activeJobs}`);
         }
       }
-    });
+    }, { noAck: false });
     
     // Process booking requests
-    await channel.consume(config.QUEUE_BOOKING_REQUESTED, async (msg) => {
+    const bookingConsumer = await channel.consume(config.QUEUE_BOOKING_REQUESTED, async (msg) => {
       if (msg !== null) {
+        activeJobs++;
+        const startTime = Date.now();
+        
         try {
           const data = JSON.parse(msg.content.toString());
           console.log(`Processing booking request: ${data.requestId}, Quote ID: ${data.quoteId}`);
@@ -129,7 +156,8 @@ async function startService() {
             { persistent: true }
           );
           
-          console.log(`Booking confirmed event published for request: ${data.requestId}`);
+          const processingTime = Date.now() - startTime;
+          console.log(`Booking confirmed event published for request: ${data.requestId} (took ${processingTime}ms)`);
           
           // Only acknowledge the message AFTER saving to database and publishing event
           channel.ack(msg);
@@ -162,25 +190,42 @@ async function startService() {
               console.error('Error parsing message content:', parseError);
             }
           }
+        } finally {
+          activeJobs--;
+          const processingTime = Date.now() - startTime;
+          console.log(`Booking request processed in ${processingTime}ms, active jobs: ${activeJobs}`);
         }
       }
-    });
+    }, { noAck: false });
+    
+    // Store consumer tags for graceful shutdown
+    activeConsumers.quotes = quoteConsumer;
+    activeConsumers.bookings = bookingConsumer;
     
     // Start scheduled tasks
     startScheduledTasks();
     
     // Handle connection close
     connection.on('close', (err) => {
-      console.error('Loadsure Service: RabbitMQ connection closed', err);
+      console.error(`Loadsure Service [${WORKER_ID}]: RabbitMQ connection closed`, err);
       console.log('Attempting to reconnect in 5 seconds...');
+      
+      // Clear active consumers
+      activeConsumers.quotes = null;
+      activeConsumers.bookings = null;
+      
       setTimeout(startService, 5000);
     });
     
-    console.log('Loadsure Service started');
+    console.log(`Loadsure Service [${WORKER_ID}] started with concurrency ${WORKER_CONCURRENCY}`);
+
+    // Return connection and channel for shutdown handling
+    return { connection, channel };
   } catch (error) {
     console.error('Loadsure Service: Error connecting to RabbitMQ:', error);
     console.log('Attempting to reconnect in 5 seconds...');
     setTimeout(startService, 5000);
+    return null;
   }
 }
 
@@ -201,9 +246,67 @@ function startScheduledTasks() {
   }, 60 * 60 * 1000); // Every hour
 }
 
-// Start the service
-if (import.meta.url === `file://${process.argv[1]}`) {
-  startService().catch(console.error);
+/**
+ * Gracefully shut down the service
+ * @param {Object} services - Services to shut down
+ */
+async function shutdown(services) {
+  console.log(`Loadsure Service [${WORKER_ID}]: Shutting down gracefully...`);
+  
+  // Cancel consumers if active
+  if (services && services.channel) {
+    if (activeConsumers.quotes) {
+      await services.channel.cancel(activeConsumers.quotes.consumerTag);
+    }
+    if (activeConsumers.bookings) {
+      await services.channel.cancel(activeConsumers.bookings.consumerTag);
+    }
+  }
+  
+  // Wait for any active jobs to finish (with timeout)
+  const maxWaitTimeMs = 10000; // 10 seconds
+  const startTime = Date.now();
+  
+  // TODO: Wait for active jobs to complete
+  
+  // Close connection
+  if (services && services.connection) {
+    await services.connection.close();
+  }
+  
+  console.log(`Loadsure Service [${WORKER_ID}]: Shutdown complete`);
 }
 
-export { startService };
+// Start the service and handle lifecycle
+let services = null;
+
+// Handle graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down...');
+  if (services) {
+    await shutdown(services);
+  }
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down...');
+  if (services) {
+    await shutdown(services);
+  }
+  process.exit(0);
+});
+
+// Start the service if this is the main module
+if (import.meta.url === `file://${process.argv[1]}`) {
+  startService()
+    .then(result => {
+      services = result;
+    })
+    .catch(error => {
+      console.error('Error starting service:', error);
+      process.exit(1);
+    });
+}
+
+export { startService, shutdown };
