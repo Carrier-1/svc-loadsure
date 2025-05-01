@@ -1,6 +1,7 @@
 // backend/src/services/loadsureService.js
 import * as amqp from 'amqplib';
 import { v4 as uuidv4 } from 'uuid';
+import Redis from 'ioredis';
 import config from '../config.js';
 import LoadsureApiService from './loadsureApiService.js';
 import DatabaseService from './databaseService.js';
@@ -15,62 +16,42 @@ const activeConsumers = {
   bookings: null
 };
 
-// Initialize Redis client for deduplication
-let redisClient;
-const memoryCache = {};
+// Initialize Redis client for distributed request tracking
+const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379', {
+  keyPrefix: 'loadsure:',
+  maxRetriesPerRequest: 3,
+  connectTimeout: 5000
+});
 
-async function initializeRedis() {
-  try {
-    const Redis = await import('ioredis');
-    redisClient = new Redis.default(process.env.REDIS_URL || 'redis://redis:6379', {
-      keyPrefix: 'loadsure:',
-      maxRetriesPerRequest: 3,
-      connectTimeout: 5000
-    });
-    console.log('Redis client initialized for deduplication');
-    
-    // Test connection
-    await redisClient.ping();
-    
-    redisClient.on('error', (err) => {
-      console.error('Redis client error:', err);
-    });
-    
-    return true;
-  } catch (error) {
-    console.error('Error initializing Redis client:', error);
-    // Fallback to in-memory deduplication if Redis is not available
-    console.log('Using in-memory deduplication fallback');
-    redisClient = {
-      get: async (key) => memoryCache[key],
-      set: async (key, value, expMode, expValue) => {
-        memoryCache[key] = value;
-        if (expValue) {
-          setTimeout(() => delete memoryCache[key], expValue * 1000);
-        }
-        return 'OK';
-      },
-      del: async (key) => {
-        const result = key in memoryCache;
-        delete memoryCache[key];
-        return result ? 1 : 0;
-      },
-      ping: async () => 'PONG'
-    };
-    return false;
-  }
-}
+// Track active jobs for more accurate concurrency control
+let activeJobs = 0;
+
+// Log Redis connection status
+redis.on('connect', () => {
+  console.log(`Loadsure Service [${WORKER_ID}]: Connected to Redis`);
+});
+
+redis.on('error', (err) => {
+  console.error(`Loadsure Service [${WORKER_ID}]: Redis connection error:`, err);
+});
 
 /**
  * Main service for handling Loadsure integration through message queues
- * with improved concurrency handling and deduplication
+ * with improved concurrency handling and distributed request tracking
  */
 async function startService() {
   try {
     console.log(`Loadsure Service [${WORKER_ID}]: Starting with concurrency ${WORKER_CONCURRENCY}`);
     
-    // Initialize Redis for deduplication
-    await initializeRedis();
+    // Test Redis connection
+    try {
+      const pingResult = await redis.ping();
+      console.log(`Loadsure Service [${WORKER_ID}]: Redis ping result: ${pingResult}`);
+    } catch (redisError) {
+      console.error(`Loadsure Service [${WORKER_ID}]: Redis connection failed:`, redisError);
+      // Continue anyway - the service can still function without Redis
+      // but will not be able to coordinate with other instances
+    }
     
     console.log('Loadsure Service: Connecting to RabbitMQ...');
     const connection = await amqp.connect(config.RABBITMQ_URL);
@@ -97,11 +78,8 @@ async function startService() {
       config.LOADSURE_BASE_URL
     );
 
-    // Track active jobs for more accurate concurrency control
-    let activeJobs = 0;
-    
     // Set up consumer functions
-    await setupConsumers(channel, loadsureApi, activeJobs);
+    await setupConsumers(channel, loadsureApi);
     
     // Handle connection close
     connection.on('close', (err) => {
@@ -128,35 +106,41 @@ async function startService() {
 }
 
 /**
- * Set up message consumers with improved error handling and deduplication
+ * Set up message consumers with Redis-based distributed request tracking
  */
-async function setupConsumers(channel, loadsureApi, activeJobs) {
-  // Process quote requests with deduplication
+async function setupConsumers(channel, loadsureApi) {
+  // Process quote requests
   const quoteConsumer = await channel.consume(config.QUEUE_QUOTE_REQUESTED, async (msg) => {
     if (msg !== null) {
       activeJobs++;
       const startTime = Date.now();
       let requestId = 'unknown';
-      let processingKey = null;
       
       try {
         const data = JSON.parse(msg.content.toString());
         requestId = data.requestId;
         console.log(`Processing quote request: ${requestId}`);
         
-        // Check for duplicate processing using Redis
-        processingKey = `processing:quote:${requestId}`;
-        const isDuplicate = await redisClient.get(processingKey);
+        // Check if this request is already being processed by another instance
+        // Use Redis to coordinate between instances
+        const processingKey = `pending:${requestId}`;
+        const isBeingProcessed = await redis.exists(processingKey);
         
-        if (isDuplicate) {
-          console.log(`Duplicate quote request detected: ${requestId} - Skipping`);
-          channel.ack(msg); // Acknowledge to remove from queue
+        if (isBeingProcessed) {
+          console.log(`Request ${requestId} is already being processed by another instance - skipping`);
+          // Acknowledge the message to remove from queue
+          channel.ack(msg);
           activeJobs--;
           return;
         }
         
-        // Mark as being processed (with 30s expiry to auto-clear stuck requests)
-        await redisClient.set(processingKey, '1', 'EX', 30);
+        // Mark this request as being processed, with a 60s expiry to automatically clean up
+        // in case this service instance crashes
+        const instanceInfo = JSON.stringify({
+          instanceId: WORKER_ID,
+          timestamp: Date.now()
+        });
+        await redis.set(processingKey, instanceInfo, 'EX', 60);
         
         let quote;
         const freightDetails = data.payload.freightDetails;
@@ -186,22 +170,20 @@ async function setupConsumers(channel, loadsureApi, activeJobs) {
           { persistent: true }
         );
         
-        // Clear processing flag once successful
-        await redisClient.del(processingKey);
-        
         const processingTime = Date.now() - startTime;
         console.log(`Quote received event published for request: ${requestId} (took ${processingTime}ms)`);
         
         // Only acknowledge the message AFTER saving to database and publishing event
         channel.ack(msg);
+        
+        // Clean up the Redis key
+        await redis.del(processingKey);
       } catch (error) {
         console.error(`Error processing quote request ${requestId}:`, error);
         
         try {
-          // Try to clear processing flag if we had one
-          if (processingKey) {
-            await redisClient.del(processingKey);
-          }
+          // Remove the pending request from Redis
+          await redis.del(`pending:${requestId}`);
           
           // If this is a temporary error, negative acknowledge with requeue
           // If it's a permanent error (like validation), we could decide not to requeue
@@ -240,13 +222,12 @@ async function setupConsumers(channel, loadsureApi, activeJobs) {
     }
   }, { noAck: false });
   
-  // Process booking requests with deduplication
+  // Process booking requests with Redis-based distributed request tracking
   const bookingConsumer = await channel.consume(config.QUEUE_BOOKING_REQUESTED, async (msg) => {
     if (msg !== null) {
       activeJobs++;
       const startTime = Date.now();
       let requestId = 'unknown';
-      let processingKey = null;
       
       try {
         const data = JSON.parse(msg.content.toString());
@@ -255,19 +236,24 @@ async function setupConsumers(channel, loadsureApi, activeJobs) {
         
         console.log(`Processing booking request: ${requestId}, Quote ID: ${quoteId}`);
         
-        // Check for duplicate processing
-        processingKey = `processing:booking:${requestId}`;
-        const isDuplicate = await redisClient.get(processingKey);
+        // Check if this request is already being processed by another instance
+        const processingKey = `pending:${requestId}`;
+        const isBeingProcessed = await redis.exists(processingKey);
         
-        if (isDuplicate) {
-          console.log(`Duplicate booking request detected: ${requestId} - Skipping`);
-          channel.ack(msg); // Acknowledge to remove from queue
+        if (isBeingProcessed) {
+          console.log(`Booking request ${requestId} is already being processed by another instance - skipping`);
+          // Acknowledge the message to remove from queue
+          channel.ack(msg);
           activeJobs--;
           return;
         }
         
-        // Mark as being processed
-        await redisClient.set(processingKey, '1', 'EX', 30);
+        // Mark this request as being processed
+        const instanceInfo = JSON.stringify({
+          instanceId: WORKER_ID,
+          timestamp: Date.now()
+        });
+        await redis.set(processingKey, instanceInfo, 'EX', 60);
         
         // Book insurance with Loadsure API
         const booking = await loadsureApi.bookInsurance(quoteId);
@@ -285,22 +271,20 @@ async function setupConsumers(channel, loadsureApi, activeJobs) {
           { persistent: true }
         );
         
-        // Clear processing flag once successful
-        await redisClient.del(processingKey);
-        
         const processingTime = Date.now() - startTime;
         console.log(`Booking confirmed event published for request: ${requestId} (took ${processingTime}ms)`);
         
         // Only acknowledge the message AFTER saving to database and publishing event
         channel.ack(msg);
+        
+        // Clean up the Redis key
+        await redis.del(processingKey);
       } catch (error) {
         console.error(`Error processing booking request ${requestId}:`, error);
         
         try {
-          // Try to clear processing flag if we had one
-          if (processingKey) {
-            await redisClient.del(processingKey);
-          }
+          // Remove the pending request from Redis
+          await redis.del(`pending:${requestId}`);
           
           // If this is a temporary error, negative acknowledge with requeue
           const isTemporaryError = error.message.includes('ECONNREFUSED') || 
@@ -363,6 +347,16 @@ function startScheduledTasks() {
       console.error('Error in scheduled task:', error);
     }
   }, 60 * 60 * 1000); // Every hour
+  
+  // Clean up stale pending requests every 5 minutes
+  setInterval(async () => {
+    try {
+      // Redis TTL will handle this automatically, no need for manual cleanup
+      // This is just a placeholder for any additional periodic tasks
+    } catch (error) {
+      console.error('Error in scheduled pending request cleanup:', error);
+    }
+  }, 5 * 60 * 1000); // Every 5 minutes
 }
 
 /**
@@ -386,17 +380,22 @@ async function shutdown(services) {
   const maxWaitTimeMs = 10000; // 10 seconds
   const startTime = Date.now();
   
-  // TODO: Wait for active jobs to complete
+  while (activeJobs > 0 && (Date.now() - startTime) < maxWaitTimeMs) {
+    console.log(`Waiting for ${activeJobs} active jobs to complete...`);
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  
+  if (activeJobs > 0) {
+    console.log(`Warning: Shutting down with ${activeJobs} jobs still active`);
+  }
   
   // Close connection
   if (services && services.connection) {
     await services.connection.close();
   }
   
-  // Close Redis connection if it's a real client
-  if (redisClient && typeof redisClient.quit === 'function') {
-    await redisClient.quit();
-  }
+  // Close Redis connection
+  await redis.quit();
   
   console.log(`Loadsure Service [${WORKER_ID}]: Shutdown complete`);
 }

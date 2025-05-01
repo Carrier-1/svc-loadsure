@@ -51,8 +51,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// Create Redis client
-const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
+// Create Redis client with configuration
+const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379', {
+  keyPrefix: 'api:',
+  maxRetriesPerRequest: 3,
+  connectTimeout: 5000,
+  retryStrategy(times) {
+    const delay = Math.min(times * 100, 2000);
+    return delay;
+  }
+});
 console.log(`Creating Redis connection to ${process.env.REDIS_URL || 'redis://redis:6379'}`);
 
 // Create event emitter for response handling
@@ -61,11 +69,11 @@ receiveEmitter.setMaxListeners(1000); // Increase max listeners to handle concur
 
 // Log Redis connection status
 redis.on('connect', () => {
-  console.log('Connected to Redis');
+  console.log(`API Service [${process.env.HOSTNAME || 'unknown'}]: Connected to Redis`);
 });
 
 redis.on('error', (err) => {
-  console.error('Redis connection error:', err);
+  console.error(`API Service [${process.env.HOSTNAME || 'unknown'}]: Redis connection error:`, err);
 });
 
 // In-memory storage (replace with a database in production)
@@ -280,14 +288,54 @@ async function startServer() {
     app.use('/api/support-data', supportDataController);
     app.use('/api/insurance', insuranceController.router);
 
+
     // Add a health check endpoint (not rate limited)
-    app.get('/health', (req, res) => {
+    app.get('/health', async (req, res) => {
+      // Check Redis connection
+      let redisStatus = 'disconnected';
+      let redisDetails = {};
+      try {
+        const pingResult = await redis.ping();
+        redisStatus = pingResult === 'PONG' ? 'connected' : 'error';
+        
+        // Get pending requests count
+        const pendingKeys = await redis.keys('pending:*');
+        redisDetails = {
+          pendingRequests: pendingKeys.length,
+          pendingRequestIds: pendingKeys.map(k => k.replace('pending:', '')).slice(0, 10) // Show max 10 keys
+        };
+      } catch (redisError) {
+        redisStatus = 'error';
+        redisDetails = { error: redisError.message };
+      }
+      
+      // Check RabbitMQ status
+      const rabbitmqStatus = channel ? 'connected' : 'disconnected';
+      let rabbitmqDetails = {};
+      if (channel) {
+        try {
+          // Check if queues exist (this will throw if connection is down)
+          await channel.checkQueue(config.QUEUE_QUOTE_REQUESTED);
+          rabbitmqDetails.healthCheck = 'passed';
+        } catch (rmqError) {
+          rabbitmqDetails.healthCheck = 'failed';
+          rabbitmqDetails.error = rmqError.message;
+        }
+      }
+      
       res.json({ 
-        status: 'ok', 
+        status: redisStatus === 'connected' && rabbitmqStatus === 'connected' ? 'ok' : 'degraded', 
         timestamp: new Date().toISOString(),
         instanceId: process.env.HOSTNAME || 'unknown',
-        rabbitmq: channel ? 'connected' : 'disconnected',
-        redis: redis.status === 'ready' ? 'connected' : 'disconnected'
+        version: process.env.npm_package_version || 'dev',
+        redis: {
+          status: redisStatus,
+          ...redisDetails
+        },
+        rabbitmq: {
+          status: rabbitmqStatus,
+          ...rabbitmqDetails
+        }
       });
     });
     
