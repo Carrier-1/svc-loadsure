@@ -326,7 +326,7 @@
         
         try {
           // API call to get certificates
-          const response = await fetch('http://localhost:3000/api/insurance/certificates/list', {
+          const response = await fetch('api/insurance/certificates/list', {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json'

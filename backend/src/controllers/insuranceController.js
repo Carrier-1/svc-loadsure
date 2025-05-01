@@ -21,18 +21,23 @@ const importModels = async () => {
 
 const router = express.Router();
 
-// In-memory storage for pending responses (still needed for async handling)
-let pendingRequests;
-// RabbitMQ channel
+// Redis and RabbitMQ dependencies - will be injected during initialization
+let redis;
+let receiveEmitter;
 let channel;
+let quotes;
+let bookings;
 
 /**
  * Initialize the controller with dependencies
  * @param {Object} dependencies - Dependencies
  */
 function initialize(dependencies) {
-  pendingRequests = dependencies.pendingRequests;
+  redis = dependencies.redis;
+  receiveEmitter = dependencies.receiveEmitter;
   channel = dependencies.channel;
+  quotes = dependencies.quotes || new Map();
+  bookings = dependencies.bookings || new Map();
   
   // Import models
   importModels().catch(console.error);
@@ -160,9 +165,12 @@ router.get('/quotes/list', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/quotes', (req, res) => {
+router.post('/quotes', async (req, res) => {
   const freightDetails = req.body;
   const requestId = uuidv4();
+  const instanceId = process.env.HOSTNAME || 'unknown-instance';
+  
+  console.log(`Creating new quote request with ID: ${requestId} on instance ${instanceId}`);
   
   // Basic validation for shipment-based payload
   if (freightDetails.shipment) {
@@ -195,12 +203,71 @@ router.post('/quotes', (req, res) => {
     });
   }
   
-  // Store connection info for later response
-  pendingRequests.set(requestId, res);
+  // Store request info in Redis (key will automatically expire after 60 seconds)
+  console.log(`Storing request ${requestId} in Redis with 60s expiry`);
+  await redis.set(`pending:${requestId}`, JSON.stringify({ 
+    timestamp: Date.now(),
+    instanceId
+  }), 'EX', 60);
+  
+  // Set up handler for this specific request
+  const responseHandler = (data) => {
+    console.log(`Response handler called for request ${requestId}`);
+    
+    // If there was an error in processing
+    if (data.error) {
+      console.error(`Error response for request ${requestId}:`, data.error);
+      
+      res.status(400).json({
+        error: data.error,
+        requestId
+      });
+      
+      // Clean up
+      redis.del(`pending:${requestId}`);
+      receiveEmitter.off(requestId, responseHandler);
+      return;
+    }
+    
+    // Calculate total with integration fee
+    let totalCost = parseFloat(data.premium || 0);
+    if (data.integrationFeeAmount) {
+      totalCost += parseFloat(data.integrationFeeAmount);
+    }
+    
+    // Send response back to client
+    console.log(`Sending response for request ${requestId} to client`);
+    res.json({
+      status: 'success',
+      quote: {
+        quoteId: data.quoteId,
+        premium: data.premium,
+        currency: data.currency,
+        coverageAmount: data.coverageAmount,
+        terms: data.terms,
+        expiresAt: data.expiresAt,
+        deductible: data.deductible || 0,
+        integrationFeeType: data.integrationFeeType,
+        integrationFeeValue: data.integrationFeeValue,
+        integrationFeeAmount: data.integrationFeeAmount,
+        totalCost: totalCost.toFixed(2)
+      }
+    });
+    
+    // Clean up the Redis key and event listener
+    redis.del(`pending:${requestId}`);
+    receiveEmitter.off(requestId, responseHandler);
+    console.log(`Cleaned up request ${requestId}`);
+  };
+  
+  // Listen for the response on the event emitter
+  console.log(`Setting up event listener for request ${requestId}`);
+  receiveEmitter.once(requestId, responseHandler);
   
   // Publish event to RabbitMQ
   const message = {
     requestId,
+    instanceId,
     payload: {
       freightDetails,
       callbackUrl: req.body.callbackUrl || null
@@ -208,22 +275,48 @@ router.post('/quotes', (req, res) => {
     timestamp: new Date().toISOString()
   };
   
-  channel.sendToQueue(
-    'quote-requested',
-    Buffer.from(JSON.stringify(message)),
-    { persistent: true }
-  );
-  
-  console.log(`Quote request ${requestId} sent to queue`);
+  try {
+    channel.sendToQueue(
+      'quote-requested',
+      Buffer.from(JSON.stringify(message)),
+      { persistent: true }
+    );
+    
+    console.log(`Quote request ${requestId} sent to queue`);
+  } catch (error) {
+    console.error(`Error sending message to queue: ${error.message}`);
+    
+    // Clean up Redis and event listener
+    await redis.del(`pending:${requestId}`);
+    receiveEmitter.off(requestId, responseHandler);
+    
+    return res.status(500).json({
+      error: 'Error sending request to processing queue',
+      requestId
+    });
+  }
   
   // Set timeout to handle case where quote is not received
-  setTimeout(() => {
-    if (pendingRequests.has(requestId)) {
+  setTimeout(async () => {
+    // Check if request is still pending
+    const pendingExists = await redis.exists(`pending:${requestId}`);
+    
+    if (pendingExists) {
+      console.log(`Request ${requestId} timed out after 30 seconds`);
+      
+      // Remove from Redis
+      await redis.del(`pending:${requestId}`);
+      
+      // Remove the event listener
+      receiveEmitter.off(requestId, responseHandler);
+      
+      // Send timeout response
       res.status(408).json({
-        error: 'Request timeout',
+        error: 'Request timeout. Your request is still being processed, but the response did not arrive in time.',
         requestId
       });
-      pendingRequests.delete(requestId);
+    } else {
+      console.log(`Request ${requestId} was already processed before timeout`);
     }
   }, 30000); // 30 seconds timeout
 });
@@ -269,7 +362,7 @@ router.post('/quotes', (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/quotes/simple', (req, res) => {
+router.post('/quotes/simple', async (req, res) => {
   const {
     // Required fields
     description,
@@ -315,6 +408,7 @@ router.post('/quotes/simple', (req, res) => {
   } = req.body;
   
   const requestId = uuidv4();
+  const instanceId = process.env.HOSTNAME || 'unknown-instance';
   
   // Basic validation for required fields
   if (!description || (!freightClass && !freightClasses) || !value || 
@@ -326,8 +420,62 @@ router.post('/quotes/simple', (req, res) => {
     });
   }
   
-  // Store connection info for later response
-  pendingRequests.set(requestId, res);
+  // Store request info in Redis (key will automatically expire after 60 seconds)
+  console.log(`Storing simple quote request ${requestId} in Redis with 60s expiry`);
+  await redis.set(`pending:${requestId}`, JSON.stringify({ 
+    timestamp: Date.now(),
+    instanceId
+  }), 'EX', 60);
+  
+  // Set up handler for this specific request
+  const responseHandler = (data) => {
+    console.log(`Response handler called for simple quote request ${requestId}`);
+    
+    // If there was an error in processing
+    if (data.error) {
+      res.status(400).json({
+        error: data.error,
+        requestId
+      });
+      
+      // Clean up
+      redis.del(`pending:${requestId}`);
+      receiveEmitter.off(requestId, responseHandler);
+      return;
+    }
+    
+    // Calculate total with integration fee
+    let totalCost = parseFloat(data.premium || 0);
+    if (data.integrationFeeAmount) {
+      totalCost += parseFloat(data.integrationFeeAmount);
+    }
+    
+    // Send response back to client
+    res.json({
+      status: 'success',
+      quote: {
+        quoteId: data.quoteId,
+        premium: data.premium,
+        currency: data.currency,
+        coverageAmount: data.coverageAmount,
+        terms: data.terms,
+        expiresAt: data.expiresAt,
+        deductible: data.deductible || 0,
+        integrationFeeType: data.integrationFeeType,
+        integrationFeeValue: data.integrationFeeValue,
+        integrationFeeAmount: data.integrationFeeAmount,
+        totalCost: totalCost.toFixed(2)
+      }
+    });
+    
+    // Clean up the Redis key and event listener
+    redis.del(`pending:${requestId}`);
+    receiveEmitter.off(requestId, responseHandler);
+  };
+  
+  // Listen for the response on the event emitter
+  console.log(`Setting up event listener for simple quote request ${requestId}`);
+  receiveEmitter.once(requestId, responseHandler);
   
   // Create primitives object for the service
   const freightDetails = {
@@ -382,6 +530,7 @@ router.post('/quotes/simple', (req, res) => {
   // Publish event to RabbitMQ
   const message = {
     requestId,
+    instanceId,
     payload: {
       freightDetails,
       callbackUrl: callbackUrl || null
@@ -389,22 +538,48 @@ router.post('/quotes/simple', (req, res) => {
     timestamp: new Date().toISOString()
   };
   
-  channel.sendToQueue(
-    'quote-requested',
-    Buffer.from(JSON.stringify(message)),
-    { persistent: true }
-  );
-  
-  console.log(`Simplified quote request ${requestId} sent to queue`);
+  try {
+    channel.sendToQueue(
+      'quote-requested',
+      Buffer.from(JSON.stringify(message)),
+      { persistent: true }
+    );
+    
+    console.log(`Simple quote request ${requestId} sent to queue`);
+  } catch (error) {
+    console.error(`Error sending message to queue: ${error.message}`);
+    
+    // Clean up Redis and event listener
+    await redis.del(`pending:${requestId}`);
+    receiveEmitter.off(requestId, responseHandler);
+    
+    return res.status(500).json({
+      error: 'Error sending request to processing queue',
+      requestId
+    });
+  }
   
   // Set timeout to handle case where quote is not received
-  setTimeout(() => {
-    if (pendingRequests.has(requestId)) {
+  setTimeout(async () => {
+    // Check if request is still pending
+    const pendingExists = await redis.exists(`pending:${requestId}`);
+    
+    if (pendingExists) {
+      console.log(`Simple quote request ${requestId} timed out after 30 seconds`);
+      
+      // Remove from Redis
+      await redis.del(`pending:${requestId}`);
+      
+      // Remove the event listener
+      receiveEmitter.off(requestId, responseHandler);
+      
+      // Send timeout response
       res.status(408).json({
         error: 'Request timeout',
         requestId
       });
-      pendingRequests.delete(requestId);
+    } else {
+      console.log(`Simple quote request ${requestId} was already processed before timeout`);
     }
   }, 30000); // 30 seconds timeout
 });
@@ -528,6 +703,7 @@ router.get('/quotes/:id', async (req, res) => {
 router.post('/bookings', async (req, res) => {
   const { quoteId } = req.body;
   const requestId = uuidv4();
+  const instanceId = process.env.HOSTNAME || 'unknown-instance';
   
   // Validate quote exists
   if (!quoteId) {
@@ -562,33 +738,102 @@ router.post('/bookings', async (req, res) => {
     });
   }
   
-  // Store connection info for later response
-  pendingRequests.set(requestId, res);
+  // Store request info in Redis (key will automatically expire after 60 seconds)
+  console.log(`Storing booking request ${requestId} in Redis with 60s expiry`);
+  await redis.set(`pending:${requestId}`, JSON.stringify({ 
+    timestamp: Date.now(),
+    instanceId
+  }), 'EX', 60);
+  
+  // Set up handler for this specific request
+  const responseHandler = (data) => {
+    console.log(`Booking response handler called for request ${requestId}`);
+    
+    // If there was an error in processing
+    if (data.error) {
+      res.status(400).json({
+        error: data.error,
+        requestId
+      });
+      
+      // Clean up
+      redis.del(`pending:${requestId}`);
+      receiveEmitter.off(requestId, responseHandler);
+      return;
+    }
+    
+    // Send response back to client
+    res.json({
+      status: 'success',
+      booking: {
+        bookingId: data.bookingId,
+        policyNumber: data.policyNumber,
+        certificateUrl: data.certificateUrl,
+        quoteId: data.quoteId,
+        timestamp: new Date().toISOString()
+      }
+    });
+    
+    // Clean up the Redis key and event listener
+    redis.del(`pending:${requestId}`);
+    receiveEmitter.off(requestId, responseHandler);
+  };
+  
+  // Listen for the response on the event emitter
+  console.log(`Setting up booking event listener for request ${requestId}`);
+  receiveEmitter.once(requestId, responseHandler);
   
   // Publish event to RabbitMQ
   const message = {
     requestId,
+    instanceId,
     quoteId,
     callbackUrl: req.body.callbackUrl || null,
     timestamp: new Date().toISOString()
   };
   
-  channel.sendToQueue(
-    'booking-requested',
-    Buffer.from(JSON.stringify(message)),
-    { persistent: true }
-  );
-  
-  console.log(`Booking request ${requestId} sent to queue`);
+  try {
+    channel.sendToQueue(
+      'booking-requested',
+      Buffer.from(JSON.stringify(message)),
+      { persistent: true }
+    );
+    
+    console.log(`Booking request ${requestId} sent to queue`);
+  } catch (error) {
+    console.error(`Error sending booking message to queue: ${error.message}`);
+    
+    // Clean up Redis and event listener
+    await redis.del(`pending:${requestId}`);
+    receiveEmitter.off(requestId, responseHandler);
+    
+    return res.status(500).json({
+      error: 'Error sending booking request to processing queue',
+      requestId
+    });
+  }
   
   // Set timeout to handle case where booking confirmation is not received
-  setTimeout(() => {
-    if (pendingRequests.has(requestId)) {
+  setTimeout(async () => {
+    // Check if request is still pending
+    const pendingExists = await redis.exists(`pending:${requestId}`);
+    
+    if (pendingExists) {
+      console.log(`Booking request ${requestId} timed out after 30 seconds`);
+      
+      // Remove from Redis
+      await redis.del(`pending:${requestId}`);
+      
+      // Remove the event listener
+      receiveEmitter.off(requestId, responseHandler);
+      
+      // Send timeout response
       res.status(408).json({
         error: 'Request timeout',
         requestId
       });
-      pendingRequests.delete(requestId);
+    } else {
+      console.log(`Booking request ${requestId} was already processed before timeout`);
     }
   }, 30000); // 30 seconds timeout
 });

@@ -298,7 +298,7 @@ export default {
       
       try {
         // API call to get quotes
-        const response = await fetch('http://localhost:3000/api/insurance/quotes/list', {
+        const response = await fetch('api/insurance/quotes/list', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json'

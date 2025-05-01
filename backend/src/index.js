@@ -1,7 +1,10 @@
+// backend/src/index.js
 import express from 'express';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 import * as amqp from 'amqplib';
+import Redis from 'ioredis';
+import { EventEmitter } from 'events';
 import config from './config.js';
 import createRateLimiter from './middleware/rateLimiter.js';
 
@@ -48,8 +51,25 @@ app.use((req, res, next) => {
   next();
 });
 
+// Create Redis client
+const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
+console.log(`Creating Redis connection to ${process.env.REDIS_URL || 'redis://redis:6379'}`);
+
+// Create event emitter for response handling
+const receiveEmitter = new EventEmitter();
+receiveEmitter.setMaxListeners(1000); // Increase max listeners to handle concurrent requests
+
+// Log Redis connection status
+redis.on('connect', () => {
+  console.log('Connected to Redis');
+});
+
+redis.on('error', (err) => {
+  console.error('Redis connection error:', err);
+});
+
 // In-memory storage (replace with a database in production)
-const pendingRequests = new Map();
+// We'll keep quotes and bookings in memory since they don't need to be shared
 const quotes = new Map();
 const bookings = new Map();
 
@@ -65,6 +85,7 @@ async function setupRabbitMQ() {
     channel = await connection.createChannel();
     
     // Ensure queues exist
+    console.log("Asserting queues");
     await channel.assertQueue(config.QUEUE_QUOTE_REQUESTED, { durable: true });
     await channel.assertQueue(config.QUEUE_QUOTE_RECEIVED, { durable: true });
     await channel.assertQueue(config.QUEUE_BOOKING_REQUESTED, { durable: true });
@@ -73,12 +94,21 @@ async function setupRabbitMQ() {
     console.log('RabbitMQ connection established');
     
     // Start consuming messages
+    console.log("Setting up consumers");
     await setupConsumers();
+    console.log("Consumers set up successfully");
     
     // Handle connection close
     connection.on('close', (err) => {
       console.error('RabbitMQ connection closed', err);
       console.log('Attempting to reconnect in 5 seconds...');
+      
+      // Additional logging about pending requests
+      redis.keys('pending:*').then(keys => {
+        console.log(`Pending requests at connection close: ${keys.length}`);
+        console.log(`Pending request IDs: ${keys.map(k => k.replace('pending:', '')).join(', ')}`);
+      }).catch(console.error);
+      
       setTimeout(setupRabbitMQ, 5000);
     });
     
@@ -94,23 +124,29 @@ async function setupRabbitMQ() {
 
 async function setupConsumers() {
   // Consumer for quote received events
-  await channel.consume(config.QUEUE_QUOTE_RECEIVED, (msg) => {
+  await channel.consume(config.QUEUE_QUOTE_RECEIVED, async (msg) => {
+    console.log("Received message in quote-received queue");
     if (msg !== null) {
       try {
+        console.log(`Message content: ${msg.content.toString().substring(0, 100)}...`);
         const data = JSON.parse(msg.content.toString());
         const { requestId } = data;
+        
+        console.log(`Looking for request ID: ${requestId}`);
+        
+        // Check if this is a pending request
+        const pendingExists = await redis.exists(`pending:${requestId}`);
+        console.log(`Checking for request ID: ${requestId} in Redis, exists: ${pendingExists}`);
         
         // Check if response indicates an error
         if (data.error) {
           console.error(`Error in quote response for request ${requestId}:`, data.error);
           
-          const res = pendingRequests.get(requestId);
-          if (res) {
-            res.status(400).json({
-              error: data.error,
-              requestId
-            });
-            pendingRequests.delete(requestId);
+          if (pendingExists) {
+            console.log(`Emitting error event for request ${requestId}`);
+            receiveEmitter.emit(requestId, { error: data.error });
+          } else {
+            console.warn(`No pending request found for error response: ${requestId}`);
           }
           
           channel.ack(msg);
@@ -122,38 +158,19 @@ async function setupConsumers() {
         // Store quote for potential future booking
         quotes.set(data.quoteId, data);
         
-        // Calculate total with integration fee
-        let totalCost = parseFloat(data.premium || 0);
-        if (data.integrationFeeAmount) {
-          totalCost += parseFloat(data.integrationFeeAmount);
-        }
-        
-        // Send response back to client
-        const res = pendingRequests.get(requestId);
-        if (res) {
-          res.json({
-            status: 'success',
-            quote: {
-              quoteId: data.quoteId,
-              premium: data.premium,
-              currency: data.currency,
-              coverageAmount: data.coverageAmount,
-              terms: data.terms,
-              expiresAt: data.expiresAt,
-              deductible: data.deductible || 0,
-              integrationFeeType: data.integrationFeeType,
-              integrationFeeValue: data.integrationFeeValue,
-              integrationFeeAmount: data.integrationFeeAmount,
-              totalCost: totalCost.toFixed(2)
-            }
-          });
-          pendingRequests.delete(requestId);
+        // Send response back to client via event emitter
+        if (pendingExists) {
+          console.log(`Found pending request for ${requestId}, emitting event`);
+          receiveEmitter.emit(requestId, data);
+        } else {
+          console.warn(`No pending request found for requestId: ${requestId}`);
         }
         
         // Acknowledge the message
         channel.ack(msg);
       } catch (error) {
         console.error('Error processing quote received message:', error);
+        console.error(`Message content: ${msg.content.toString()}`);
         // Negative acknowledge and requeue the message
         channel.nack(msg, false, true);
       }
@@ -161,7 +178,8 @@ async function setupConsumers() {
   });
   
   // Consumer for booking confirmed events
-  await channel.consume(config.QUEUE_BOOKING_CONFIRMED, (msg) => {
+  await channel.consume(config.QUEUE_BOOKING_CONFIRMED, async (msg) => {
+    console.log("Received message in booking-confirmed queue");
     if (msg !== null) {
       try {
         const data = JSON.parse(msg.content.toString());
@@ -171,38 +189,29 @@ async function setupConsumers() {
         if (data.error) {
           console.error(`Error in booking response for request ${requestId}:`, data.error);
           
-          const res = pendingRequests.get(requestId);
-          if (res) {
-            res.status(400).json({
-              error: data.error,
-              requestId
-            });
-            pendingRequests.delete(requestId);
+          // Check if this is a pending request
+          const pendingExists = await redis.exists(`pending:${requestId}`);
+          if (pendingExists) {
+            receiveEmitter.emit(requestId, { error: data.error });
           }
           
           channel.ack(msg);
           return;
         }
         
-        console.log(`Booking confirmed for request ${requestId}, booking ID: ${data.bookingId}, quote ID: ${data.quoteId}, certificate URL: ${data.certificateUrl}, policy number: ${data.policyNumber}`);
+        console.log(`Booking confirmed for request ${requestId}, booking ID: ${data.bookingId}, quote ID: ${data.quoteId}, certificate URL: ${data.certificateUrl}`);
         
         // Store booking
         bookings.set(data.bookingId, data);
         
-        // Send response back to client
-        const res = pendingRequests.get(requestId);
-        if (res) {
-          res.json({
-            status: 'success',
-            booking: {
-              bookingId: data.bookingId,
-              policyNumber: data.policyNumber,
-              certificateUrl: data.certificateUrl,
-              quoteId: data.quoteId,
-              timestamp: new Date().toISOString()
-            }
-          });
-          pendingRequests.delete(requestId);
+        // Check if this is a pending request
+        const pendingExists = await redis.exists(`pending:${requestId}`);
+        
+        if (pendingExists) {
+          console.log(`Found pending request for ${requestId}, emitting event`);
+          receiveEmitter.emit(requestId, data);
+        } else {
+          console.warn(`No pending request found for requestId: ${requestId}`);
         }
         
         // Acknowledge the message
@@ -260,7 +269,8 @@ async function startServer() {
     
     // Initialize controllers
     insuranceController.initialize({
-      pendingRequests,
+      redis,
+      receiveEmitter,
       quotes,
       bookings,
       channel
@@ -272,7 +282,13 @@ async function startServer() {
 
     // Add a health check endpoint (not rate limited)
     app.get('/health', (req, res) => {
-      res.json({ status: 'ok', timestamp: new Date().toISOString() });
+      res.json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        instanceId: process.env.HOSTNAME || 'unknown',
+        rabbitmq: channel ? 'connected' : 'disconnected',
+        redis: redis.status === 'ready' ? 'connected' : 'disconnected'
+      });
     });
     
     // Setup Swagger documentation
@@ -281,6 +297,7 @@ async function startServer() {
     // Start the API server
     app.listen(config.PORT, () => {
       console.log(`Loadsure Insurance Microservice API running on port ${config.PORT}`);
+      console.log(`Instance ID: ${process.env.HOSTNAME || 'unknown'}`);
       console.log(`Swagger documentation available at http://localhost:${config.PORT}/api-docs`);
     });
         
@@ -319,4 +336,4 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Export for testing
-export { app };
+export { app, redis, receiveEmitter };

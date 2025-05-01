@@ -426,6 +426,12 @@ export default {
     formatDateForInput(date) {
       return date.toISOString().split('T')[0];
     },
+
+    generateSessionId() {
+      const sessionId = `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      localStorage.setItem('sessionId', sessionId);
+      return sessionId;
+    },
     
     // Methods for updating form data from child components
     updateFreightDetails(value) {
@@ -593,18 +599,38 @@ export default {
       this.loadingMessage = 'Getting insurance quote...';
       this.apiError = null;
       
+      // Create a unique request ID to track this request
+      const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      
       try {
-        // Format the payload for Loadsure API
+        // Format the payload for Loadsure API and add the request ID
         const loadsurePayload = this.formatLoadsurePayload();
         
+        // Add extra tracking properties to help with debugging
+        loadsurePayload.requestMetadata = {
+          clientTime: new Date().toISOString(),
+          requestId: requestId,
+          sessionId: localStorage.getItem('sessionId') || this.generateSessionId()
+        };
+        
+        // Add request timeout handling
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+        
+        console.log(`Sending quote request ${requestId}`, loadsurePayload);
+        
         // Call backend API with the complete object
-        const response = await fetch('http://localhost:3000/api/insurance/quotes', {
+        const response = await fetch('api/insurance/quotes', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'X-Request-ID': requestId
           },
-          body: JSON.stringify(loadsurePayload)
+          body: JSON.stringify(loadsurePayload),
+          signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
         
         const data = await response.json();
         
@@ -613,6 +639,8 @@ export default {
         }
         
         if (data.status === 'success' && data.quote) {
+          console.log(`Quote received for request ${requestId}`, data.quote);
+          
           // Convert expiresAt string to Date object
           data.quote.expiresAt = new Date(data.quote.expiresAt);
           this.quote = data.quote;
@@ -628,13 +656,17 @@ export default {
           throw new Error('Invalid quote response');
         }
       } catch (error) {
-        console.error('Error getting quote:', error);
-        this.apiError = error.message;
+        console.error(`Error getting quote for request ${requestId}:`, error);
+        
+        if (error.name === 'AbortError') {
+          this.apiError = 'Request timed out. The server took too long to respond. Please try again.';
+        } else {
+          this.apiError = error.message;
+        }
       } finally {
         this.isLoading = false;
       }
     },
-    
     async bookInsurance() {
       if (!this.quote) return;
       

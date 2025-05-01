@@ -138,6 +138,7 @@ class LoadsureApiService {
         throw new Error(`Loadsure Quote API validation errors: ${JSON.stringify(data.errors)}`);
       }
       
+      console.log(`Received quote from Loadsure API:, ${JSON.stringify(data, null, 2)}`);
       // Format the response to match our internal format
       return {
         quoteId: data.quoteToken,
