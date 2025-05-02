@@ -299,7 +299,7 @@ router.post('/quotes', async (req, res) => {
     const pendingExists = await redis.exists(`pending:${requestId}`);
     
     if (pendingExists) {
-      console.log(`Request ${requestId} timed out after 30 seconds`);
+      console.log(`Request ${requestId} timed out after 60 seconds`);
       
       // Remove from Redis
       await redis.del(`pending:${requestId}`);
@@ -315,7 +315,7 @@ router.post('/quotes', async (req, res) => {
     } else {
       console.log(`Request ${requestId} was already processed before timeout`);
     }
-  }, 30000); // 30 seconds timeout
+  }, 60000); // 60 seconds timeout
 });
 
 /**
@@ -563,7 +563,7 @@ router.post('/quotes/simple', async (req, res) => {
     const pendingExists = await redis.exists(`pending:${requestId}`);
     
     if (pendingExists) {
-      console.log(`Simple quote request ${requestId} timed out after 30 seconds`);
+      console.log(`Simple quote request ${requestId} timed out after 60 seconds`);
       
       // Remove from Redis
       await redis.del(`pending:${requestId}`);
@@ -579,7 +579,7 @@ router.post('/quotes/simple', async (req, res) => {
     } else {
       console.log(`Simple quote request ${requestId} was already processed before timeout`);
     }
-  }, 30000); // 30 seconds timeout
+  }, 60000); // 60 seconds timeout
 });
 
 /**
@@ -818,7 +818,7 @@ router.post('/bookings', async (req, res) => {
     const pendingExists = await redis.exists(`pending:${requestId}`);
     
     if (pendingExists) {
-      console.log(`Booking request ${requestId} timed out after 30 seconds`);
+      console.log(`Booking request ${requestId} timed out after 60 seconds`);
       
       // Remove from Redis
       await redis.del(`pending:${requestId}`);
@@ -834,7 +834,7 @@ router.post('/bookings', async (req, res) => {
     } else {
       console.log(`Booking request ${requestId} was already processed before timeout`);
     }
-  }, 30000); // 30 seconds timeout
+  }, 60000); // 60 seconds timeout
 });
 
 /**

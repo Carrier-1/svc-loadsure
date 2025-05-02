@@ -676,7 +676,7 @@ export default {
       
       try {
         // Call backend API
-        const response = await fetch('http://localhost:3000/api/insurance/bookings', {
+        const response = await fetch('api/insurance/bookings', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -714,7 +714,7 @@ export default {
       
       try {
         // Call backend API to get certificate details
-        const response = await fetch('http://localhost:3000/api/insurance/certificates', {
+        const response = await fetch('api/insurance/certificates', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -1207,7 +1207,7 @@ export default {
         }
         
         // Fetch the quote data
-        const response = await fetch(`http://localhost:3000/api/insurance/quotes/${quoteId}`, {
+        const response = await fetch(`api/insurance/quotes/${quoteId}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json'
