@@ -161,6 +161,7 @@ router.get('/quotes/list', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
+// Modified API endpoint to use Redis for response handling
 router.post('/quotes', async (req, res) => {
   const freightDetails = req.body;
   const requestId = uuidv4();
@@ -199,67 +200,13 @@ router.post('/quotes', async (req, res) => {
     });
   }
   
-  // Store request info in Redis (key will automatically expire after 60 seconds)
-  console.log(`Storing request ${requestId} in Redis with 60s expiry`);
+  // Store request info in Redis (key will automatically expire after 120 seconds)
+  console.log(`Storing request ${requestId} in Redis with 120s expiry`);
   await redis.set(`pending:${requestId}`, JSON.stringify({ 
     timestamp: Date.now(),
     instanceId,
     type: 'quote'
-  }), 'EX', 60);
-  
-  // Set up handler for this specific request
-  const responseHandler = (data) => {
-    console.log(`Response handler called for request ${requestId}`);
-    
-    // If there was an error in processing
-    if (data.error) {
-      console.error(`Error response for request ${requestId}:`, data.error);
-      
-      res.status(400).json({
-        error: data.error,
-        requestId
-      });
-      
-      // Clean up
-      redis.del(`pending:${requestId}`);
-      receiveEmitter.off(requestId, responseHandler);
-      return;
-    }
-    
-    // Calculate total with integration fee
-    let totalCost = parseFloat(data.premium || 0);
-    if (data.integrationFeeAmount) {
-      totalCost += parseFloat(data.integrationFeeAmount);
-    }
-    
-    // Send response back to client
-    console.log(`Sending response for request ${requestId} to client`);
-    res.json({
-      status: 'success',
-      quote: {
-        quoteId: data.quoteId,
-        premium: data.premium,
-        currency: data.currency,
-        coverageAmount: data.coverageAmount,
-        terms: data.terms,
-        expiresAt: data.expiresAt,
-        deductible: data.deductible || 0,
-        integrationFeeType: data.integrationFeeType,
-        integrationFeeValue: data.integrationFeeValue,
-        integrationFeeAmount: data.integrationFeeAmount,
-        totalCost: totalCost.toFixed(2)
-      }
-    });
-    
-    // Clean up the Redis key and event listener
-    redis.del(`pending:${requestId}`);
-    receiveEmitter.off(requestId, responseHandler);
-    console.log(`Cleaned up request ${requestId}`);
-  };
-  
-  // Listen for the response on the event emitter
-  console.log(`Setting up event listener for request ${requestId}`);
-  receiveEmitter.once(requestId, responseHandler);
+  }), 'EX', 120);
   
   // Publish event to RabbitMQ
   const message = {
@@ -283,9 +230,8 @@ router.post('/quotes', async (req, res) => {
   } catch (error) {
     console.error(`Error sending message to queue: ${error.message}`);
     
-    // Clean up Redis and event listener
+    // Clean up Redis
     await redis.del(`pending:${requestId}`);
-    receiveEmitter.off(requestId, responseHandler);
     
     return res.status(500).json({
       error: 'Error sending request to processing queue',
@@ -293,29 +239,83 @@ router.post('/quotes', async (req, res) => {
     });
   }
   
-  // Set timeout to handle case where quote is not received
-  setTimeout(async () => {
-    // Check if request is still pending
-    const pendingExists = await redis.exists(`pending:${requestId}`);
+  // Set up polling to check for response
+  let attempts = 0;
+  const maxAttempts = 60; // 60 attempts × 1 second = 60 seconds max wait time
+  const pollInterval = 1000; // 1 second between checks
+  
+  const checkForResponse = async () => {
+    attempts++;
     
-    if (pendingExists) {
-      console.log(`Request ${requestId} timed out after 60 seconds`);
+    // Check if there's a response in Redis
+    const responseJson = await redis.get(`response:${requestId}`);
+    
+    if (responseJson) {
+      // We found a response
+      const response = JSON.parse(responseJson);
       
-      // Remove from Redis
+      // Clean up Redis keys
+      await redis.del(`pending:${requestId}`);
+      await redis.del(`response:${requestId}`);
+      
+      // Check if it's an error response
+      if (response.error) {
+        return res.status(400).json({
+          error: response.error,
+          requestId
+        });
+      }
+      
+      // It's a successful response
+      const data = response.data;
+      
+      // Calculate total with integration fee
+      let totalCost = parseFloat(data.premium || 0);
+      if (data.integrationFeeAmount) {
+        totalCost += parseFloat(data.integrationFeeAmount);
+      }
+      
+      // Send response back to client
+      console.log(`Sending response for request ${requestId} to client (found in Redis)`);
+      return res.json({
+        status: 'success',
+        quote: {
+          quoteId: data.quoteId,
+          premium: data.premium,
+          currency: data.currency,
+          coverageAmount: data.coverageAmount,
+          terms: data.terms,
+          expiresAt: data.expiresAt,
+          deductible: data.deductible || 0,
+          integrationFeeType: data.integrationFeeType,
+          integrationFeeValue: data.integrationFeeValue,
+          integrationFeeAmount: data.integrationFeeAmount,
+          totalCost: totalCost.toFixed(2),
+          processingTime: Date.now() - message.timestamp
+        }
+      });
+    }
+    
+    // Check if we've exceeded the maximum number of attempts
+    if (attempts >= maxAttempts) {
+      // We've waited long enough, send a timeout response
+      console.log(`Request ${requestId} timed out after ${maxAttempts} attempts`);
+      
+      // Clean up Redis key
       await redis.del(`pending:${requestId}`);
       
-      // Remove the event listener
-      receiveEmitter.off(requestId, responseHandler);
-      
-      // Send timeout response
-      res.status(408).json({
+      return res.status(408).json({
         error: 'Request timeout. Your request is still being processed, but the response did not arrive in time.',
         requestId
       });
-    } else {
-      console.log(`Request ${requestId} was already processed before timeout`);
     }
-  }, 60000); // 60 seconds timeout
+    
+    // Continue polling
+    setTimeout(checkForResponse, pollInterval);
+  };
+  
+  // Start polling
+  setTimeout(checkForResponse, pollInterval);
 });
 
 /**

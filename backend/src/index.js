@@ -131,7 +131,7 @@ async function setupRabbitMQ() {
 // --- RabbitMQ Consumers ---
 
 async function setupConsumers() {
-  // Consumer for quote received events
+  // In the consumer that processes messages from QUEUE_QUOTE_RECEIVED
   await channel.consume(config.QUEUE_QUOTE_RECEIVED, async (msg) => {
     console.log("Received message in quote-received queue");
     if (msg !== null) {
@@ -151,8 +151,13 @@ async function setupConsumers() {
           console.error(`Error in quote response for request ${requestId}:`, data.error);
           
           if (pendingExists) {
-            console.log(`Emitting error event for request ${requestId}`);
-            receiveEmitter.emit(requestId, { error: data.error });
+            // Store the error response in Redis
+            await redis.set(`response:${requestId}`, JSON.stringify({ 
+              error: data.error,
+              timestamp: Date.now()
+            }), 'EX', 300); // Keep response for 5 minutes
+            
+            console.log(`Stored error response in Redis for request ${requestId}`);
           } else {
             console.warn(`No pending request found for error response: ${requestId}`);
           }
@@ -166,10 +171,15 @@ async function setupConsumers() {
         // Store quote for potential future booking
         quotes.set(data.quoteId, data);
         
-        // Send response back to client via event emitter
+        // Store the response in Redis instead of using event emitter
         if (pendingExists) {
-          console.log(`Found pending request for ${requestId}, emitting event`);
-          receiveEmitter.emit(requestId, data);
+          console.log(`Storing response in Redis for request ${requestId}`);
+          
+          // Store full response data
+          await redis.set(`response:${requestId}`, JSON.stringify({
+            data: data,
+            timestamp: Date.now()
+          }), 'EX', 300); // Keep response for 5 minutes
         } else {
           console.warn(`No pending request found for requestId: ${requestId}`);
         }
