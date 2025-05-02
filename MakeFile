@@ -196,3 +196,27 @@ ps: status
 prune:
 	@echo "Removing unused Docker resources..."
 	docker system prune -f
+
+# Test commands
+.PHONY: test-setup test e2e-test test-cleanup
+
+test-setup:
+	@echo "Setting up test environment..."
+	npm install node-fetch@2 uuid
+	chmod +x run-e2e-test.sh
+
+e2e-test: test-setup
+	@echo "Running E2E tests..."
+	./run-e2e-test.sh
+
+test: e2e-test
+	@echo "All tests completed."
+
+test-cleanup:
+	@echo "Cleaning up test artifacts..."
+	rm -rf node_modules
+
+up-and-test:
+	@echo "Starting services and running tests..."
+	$(MAKE) up
+	$(MAKE) e2e-test

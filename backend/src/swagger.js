@@ -347,8 +347,8 @@ const swaggerOptions = {
         },
         FreightDetailsSimple: {
           type: 'object',
-          required: ['description', 'value', 'originCity', 'originState', 'destinationCity', 'destinationState'],
           properties: {
+            // Basic cargo details
             description: {
               type: 'string',
               description: 'Description of the freight'
@@ -362,6 +362,8 @@ const swaggerOptions = {
               format: 'double',
               description: 'Value of the freight'
             },
+            
+            // Origin fields
             originCity: {
               type: 'string',
               description: 'Origin city'
@@ -370,6 +372,25 @@ const swaggerOptions = {
               type: 'string',
               description: 'Origin state or province'
             },
+            originAddress1: {
+              type: 'string',
+              description: 'Origin address line 1'
+            },
+            originAddress2: {
+              type: 'string',
+              description: 'Origin address line 2'
+            },
+            originPostal: {
+              type: 'string',
+              description: 'Origin postal code'
+            },
+            originCountry: {
+              type: 'string',
+              default: 'USA',
+              description: 'Origin country'
+            },
+            
+            // Destination fields
             destinationCity: {
               type: 'string',
               description: 'Destination city'
@@ -378,6 +399,25 @@ const swaggerOptions = {
               type: 'string',
               description: 'Destination state or province'
             },
+            destinationAddress1: {
+              type: 'string',
+              description: 'Destination address line 1'
+            },
+            destinationAddress2: {
+              type: 'string',
+              description: 'Destination address line 2'
+            },
+            destinationPostal: {
+              type: 'string',
+              description: 'Destination postal code'
+            },
+            destinationCountry: {
+              type: 'string',
+              default: 'USA',
+              description: 'Destination country'
+            },
+            
+            // Optional fields with defaults
             currency: {
               type: 'string',
               default: 'USD',
@@ -409,6 +449,8 @@ const swaggerOptions = {
               default: 'lbs',
               description: 'Unit of weight measurement'
             },
+            
+            // ID fields
             commodityId: {
               type: 'string',
               description: 'Commodity ID from Loadsure'
@@ -421,6 +463,8 @@ const swaggerOptions = {
               type: 'string',
               description: 'Equipment type ID from Loadsure'
             },
+            
+            // Date fields
             pickupDate: {
               type: 'string',
               format: 'date',
@@ -431,6 +475,45 @@ const swaggerOptions = {
               format: 'date',
               description: 'Delivery date'
             },
+            
+            // Carrier information
+            carrierName: {
+              type: 'string',
+              description: 'Carrier name'
+            },
+            carrierEmail: {
+              type: 'string',
+              format: 'email',
+              description: 'Carrier email'
+            },
+            carrierPhone: {
+              type: 'string',
+              description: 'Carrier phone number'
+            },
+            carrierDotNumber: {
+              type: 'string',
+              description: 'Carrier DOT number'
+            },
+            carrierEquipmentType: {
+              type: 'string',
+              description: 'Carrier equipment type'
+            },
+            carrierMode: {
+              type: 'string',
+              default: 'ROAD',
+              description: 'Carrier mode (ROAD, RAIL, SEA, AIR)'
+            },
+            carrierIdType: {
+              type: 'string',
+              default: 'USDOT',
+              description: 'Carrier ID type (USDOT, MC, SCAC, OTHER)'
+            },
+            carrierIdValue: {
+              type: 'string',
+              description: 'Carrier ID value'
+            },
+            
+            // User information
             userName: {
               type: 'string',
               description: 'User name'
@@ -440,6 +523,8 @@ const swaggerOptions = {
               format: 'email',
               description: 'User email'
             },
+            
+            // Assured information
             assuredName: {
               type: 'string',
               description: 'Assured company name'
@@ -449,6 +534,134 @@ const swaggerOptions = {
               format: 'email',
               description: 'Assured company email'
             },
+            
+            // Callback URL
+            callbackUrl: {
+              type: 'string',
+              format: 'uri',
+              description: 'Optional callback URL for asynchronous processing'
+            },
+            
+            // Advanced fields for multiple elements
+            freightClasses: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  classId: { type: 'string' },
+                  percentage: { type: 'number' }
+                }
+              },
+              description: 'Multiple freight classes with percentages'
+            },
+            commodities: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' }
+                }
+              },
+              description: 'Multiple commodities'
+            },
+            carriers: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  email: { type: 'string', format: 'email' },
+                  phone: { type: 'string' },
+                  mode: { type: 'string', default: 'ROAD' },
+                  equipmentType: { type: 'string' },
+                  carrierId: {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string', default: 'USDOT' },
+                      value: { type: 'string' }
+                    }
+                  }
+                }
+              },
+              description: 'Multiple carriers'
+            },
+            stops: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  stopType: { type: 'string', enum: ['PICKUP', 'DELIVERY', 'INTERMEDIATE'] },
+                  stopNumber: { type: 'integer' },
+                  date: { type: 'string', format: 'date' },
+                  address: {
+                    type: 'object',
+                    properties: {
+                      address1: { type: 'string' },
+                      address2: { type: 'string' },
+                      city: { type: 'string' },
+                      state: { type: 'string' },
+                      postal: { type: 'string' },
+                      country: { type: 'string', default: 'USA' }
+                    }
+                  }
+                }
+              },
+              description: 'Multiple stops including origin and destination'
+            },
+            
+            // User and assured objects (alternative to individual fields)
+            user: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+                email: { type: 'string', format: 'email' }
+              },
+              description: 'User information'
+            },
+            assured: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                email: { type: 'string', format: 'email' },
+                address: {
+                  type: 'object',
+                  properties: {
+                    address1: { type: 'string' },
+                    address2: { type: 'string' },
+                    city: { type: 'string' },
+                    state: { type: 'string' },
+                    postal: { type: 'string' },
+                    country: { type: 'string', default: 'USA' }
+                  }
+                }
+              },
+              description: 'Assured information'
+            },
+            assuredAddress: {
+              type: 'object',
+              properties: {
+                address1: { type: 'string' },
+                address2: { type: 'string' },
+                city: { type: 'string' },
+                state: { type: 'string' },
+                postal: { type: 'string' },
+                country: { type: 'string', default: 'USA' }
+              },
+              description: 'Assured address information'
+            },
+            
+            // Additional fields
+            freightId: {
+              type: 'string',
+              description: 'Freight identifier'
+            },
+            poNumber: {
+              type: 'string',
+              description: 'Purchase order number'
+            },
+            
+            // Integration fee fields
             integrationFeeType: {
               type: 'string',
               enum: ['percentage', 'fixed', null],
@@ -459,7 +672,8 @@ const swaggerOptions = {
               format: 'double',
               description: 'Value of integration fee (percentage or fixed amount)'
             }
-          }
+          },
+          required: ['description', 'value'],
         },
         FreightDetailsComplete: {
           type: 'object',

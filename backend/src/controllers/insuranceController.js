@@ -401,21 +401,63 @@ router.post('/quotes/simple', async (req, res) => {
     // Support for user and assured data
     user,
     assured,
-
+    
     // Integration fee fields
     integrationFeeType,
-    integrationFeeValue
+    integrationFeeValue,
+    
+    // Additional fields the UI supports
+    freightId,
+    poNumber,
+    
+    // Full address fields
+    assuredAddress,
+    originAddress1,
+    originAddress2,
+    originPostal,
+    originCountry,
+    destinationAddress1,
+    destinationAddress2,
+    destinationPostal,
+    destinationCountry,
+    
+    // Additional carrier fields
+    carrierEquipmentType,
+    carrierMode,
+    carrierIdType,
+    carrierIdValue
   } = req.body;
   
   const requestId = uuidv4();
   const instanceId = process.env.HOSTNAME || 'unknown-instance';
   
-  // Basic validation for required fields
-  if (!description || (!freightClass && !freightClasses) || !value || 
-      (!originCity && !stops) || (!originState && !stops) || 
-      (!destinationCity && !stops) || (!destinationState && !stops)) {
+  // Basic validation for required fields with more flexible handling
+  const missingFields = [];
+  
+  if (!description) missingFields.push('description');
+  
+  // Check for freight class in any format
+  if (!freightClass && (!freightClasses || freightClasses.length === 0)) {
+    missingFields.push('freightClass/freightClasses');
+  }
+  
+  if (!value) missingFields.push('value');
+  
+  // Check for origin/destination in any format
+  const hasOrigin = (originCity && originState) || 
+                    (stops && stops.length > 0 && stops[0].address && 
+                     stops[0].address.city && stops[0].address.state);
+  
+  const hasDestination = (destinationCity && destinationState) || 
+                         (stops && stops.length > 1 && stops[1].address && 
+                          stops[1].address.city && stops[1].address.state);
+  
+  if (!hasOrigin) missingFields.push('origin information');
+  if (!hasDestination) missingFields.push('destination information');
+  
+  if (missingFields.length > 0) {
     return res.status(400).json({
-      error: 'Missing required fields. Required: description, freightClass/freightClasses, value, origin and destination info (either as individual fields or in stops array)',
+      error: `Missing required fields: ${missingFields.join(', ')}`,
       requestId
     });
   }
@@ -434,48 +476,120 @@ router.post('/quotes/simple', async (req, res) => {
     description,
     freightClass,
     value,
-    originCity,
-    originState,
-    destinationCity,
-    destinationState,
-    currency,
-    dimensionLength,
-    dimensionWidth,
-    dimensionHeight,
-    dimensionUnit,
-    weightValue,
-    weightUnit,
+    
+    // Location data with flexible handling
+    originCity: originCity || (stops && stops[0] && stops[0].address ? stops[0].address.city : null),
+    originState: originState || (stops && stops[0] && stops[0].address ? stops[0].address.state : null),
+    originAddress1: originAddress1 || (stops && stops[0] && stops[0].address ? stops[0].address.address1 : null),
+    originAddress2: originAddress2 || (stops && stops[0] && stops[0].address ? stops[0].address.address2 : null),
+    originPostal: originPostal || (stops && stops[0] && stops[0].address ? stops[0].address.postal : null),
+    originCountry: originCountry || (stops && stops[0] && stops[0].address ? stops[0].address.country : 'USA'),
+    
+    destinationCity: destinationCity || (stops && stops[1] && stops[1].address ? stops[1].address.city : null),
+    destinationState: destinationState || (stops && stops[1] && stops[1].address ? stops[1].address.state : null),
+    destinationAddress1: destinationAddress1 || (stops && stops[1] && stops[1].address ? stops[1].address.address1 : null),
+    destinationAddress2: destinationAddress2 || (stops && stops[1] && stops[1].address ? stops[1].address.address2 : null),
+    destinationPostal: destinationPostal || (stops && stops[1] && stops[1].address ? stops[1].address.postal : null),
+    destinationCountry: destinationCountry || (stops && stops[1] && stops[1].address ? stops[1].address.country : 'USA'),
+    
+    // Optional fields with defaults for compatibility
+    currency: currency || 'USD',
+    dimensionLength: dimensionLength || 48,
+    dimensionWidth: dimensionWidth || 40,
+    dimensionHeight: dimensionHeight || 48,
+    dimensionUnit: dimensionUnit || 'in',
+    weightValue: weightValue || 500,
+    weightUnit: weightUnit || 'lbs',
     commodityId,
     loadTypeId,
     equipmentTypeId,
-    pickupDate,
-    deliveryDate,
+    
+    // Date handling with fallback defaults
+    pickupDate: pickupDate || (stops && stops[0] ? stops[0].date : null),
+    deliveryDate: deliveryDate || (stops && stops[1] ? stops[1].date : null),
+    
+    // Carrier information with flexible handling
     carrierName,
     carrierEmail,
     carrierPhone,
     carrierDotNumber,
+    carrierEquipmentType,
+    carrierMode,
+    carrierIdType,
+    carrierIdValue,
     
     // Support for multiple elements
-    freightClasses,
-    commodities,
-    carriers,
-    stops,
+    freightClasses: freightClasses || (freightClass ? [{ classId: freightClass, percentage: 100 }] : null),
+    commodities: commodities || (commodityId ? [{ id: commodityId }] : null),
+    carriers: carriers || (carrierName ? [{
+      name: carrierName,
+      email: carrierEmail,
+      phone: carrierPhone,
+      mode: carrierMode || 'ROAD',
+      equipmentType: carrierEquipmentType || equipmentTypeId,
+      carrierId: {
+        type: carrierIdType || 'USDOT',
+        value: carrierIdValue || carrierDotNumber
+      }
+    }] : null),
+    
+    // Handle stops with proper validation
+    stops: stops || [
+      {
+        stopType: 'PICKUP',
+        stopNumber: 1,
+        date: pickupDate || new Date().toISOString().split('T')[0],
+        address: {
+          address1: originAddress1 || '',
+          address2: originAddress2 || '',
+          city: originCity || '',
+          state: originState || '',
+          postal: originPostal || '',
+          country: originCountry || 'USA'
+        }
+      },
+      {
+        stopType: 'DELIVERY',
+        stopNumber: 2,
+        date: deliveryDate || (() => {
+          const nextWeek = new Date();
+          nextWeek.setDate(nextWeek.getDate() + 7);
+          return nextWeek.toISOString().split('T')[0];
+        })(),
+        address: {
+          address1: destinationAddress1 || '',
+          address2: destinationAddress2 || '',
+          city: destinationCity || '',
+          state: destinationState || '',
+          postal: destinationPostal || '',
+          country: destinationCountry || 'USA'
+        }
+      }
+    ],
     
     // Support for user and assured data
     user: user || {
-      name: userName,
-      email: userEmail,
-      id: userEmail // Set id to email by default
+      name: userName || '',
+      email: userEmail || '',
+      id: userEmail || '' // Set id to email by default
     },
+    
     assured: assured || {
-      name: assuredName,
-      email: assuredEmail,
-      address: req.body.assuredAddress || {
-        city: originCity,
-        state: originState,
-        country: 'USA'
+      name: assuredName || '',
+      email: assuredEmail || '',
+      address: assuredAddress || {
+        address1: originAddress1 || '',
+        address2: originAddress2 || '',
+        city: originCity || '',
+        state: originState || '',
+        postal: originPostal || '',
+        country: originCountry || 'USA'
       }
     },
+    
+    // Additional fields
+    freightId: freightId || `FR-${Date.now().toString().substring(7)}`,
+    poNumber: poNumber || `PO-${Date.now().toString().substring(7)}`,
     
     // Add integration fee fields if provided
     integrationFeeType,
