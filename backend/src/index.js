@@ -4,7 +4,6 @@ import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 import * as amqp from 'amqplib';
 import Redis from 'ioredis';
-import { EventEmitter } from 'events';
 import config from './config.js';
 import createRateLimiter from './middleware/rateLimiter.js';
 
@@ -62,10 +61,6 @@ const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379', {
   }
 });
 console.log(`Creating Redis connection to ${process.env.REDIS_URL || 'redis://redis:6379'}`);
-
-// Create event emitter for response handling
-const receiveEmitter = new EventEmitter();
-receiveEmitter.setMaxListeners(1000); // Increase max listeners to handle concurrent requests
 
 // Log Redis connection status
 redis.on('connect', () => {
@@ -203,14 +198,26 @@ async function setupConsumers() {
         const data = JSON.parse(msg.content.toString());
         const { requestId } = data;
         
+        console.log(`Looking for request ID: ${requestId}`);
+        
+        // Check if this is a pending request
+        const pendingExists = await redis.exists(`pending:${requestId}`);
+        console.log(`Checking for request ID: ${requestId} in Redis, exists: ${pendingExists}`);
+        
         // Check if response indicates an error
         if (data.error) {
           console.error(`Error in booking response for request ${requestId}:`, data.error);
           
-          // Check if this is a pending request
-          const pendingExists = await redis.exists(`pending:${requestId}`);
           if (pendingExists) {
-            receiveEmitter.emit(requestId, { error: data.error });
+            // Store the error response in Redis
+            await redis.set(`response:${requestId}`, JSON.stringify({ 
+              error: data.error,
+              timestamp: Date.now()
+            }), 'EX', 300); // Keep response for 5 minutes
+            
+            console.log(`Stored error response in Redis for request ${requestId}`);
+          } else {
+            console.warn(`No pending request found for error response: ${requestId}`);
           }
           
           channel.ack(msg);
@@ -222,12 +229,15 @@ async function setupConsumers() {
         // Store booking
         bookings.set(data.bookingId, data);
         
-        // Check if this is a pending request
-        const pendingExists = await redis.exists(`pending:${requestId}`);
-        
+        // Store the response in Redis
         if (pendingExists) {
-          console.log(`Found pending request for ${requestId}, emitting event`);
-          receiveEmitter.emit(requestId, data);
+          console.log(`Storing booking response in Redis for request ${requestId}`);
+          
+          // Store full response data
+          await redis.set(`response:${requestId}`, JSON.stringify({
+            data: data,
+            timestamp: Date.now()
+          }), 'EX', 300); // Keep response for 5 minutes
         } else {
           console.warn(`No pending request found for requestId: ${requestId}`);
         }
@@ -236,6 +246,7 @@ async function setupConsumers() {
         channel.ack(msg);
       } catch (error) {
         console.error('Error processing booking confirmed message:', error);
+        console.error(`Message content: ${msg.content.toString()}`);
         // Negative acknowledge and requeue the message
         channel.nack(msg, false, true);
       }
@@ -288,10 +299,9 @@ async function startServer() {
     // Initialize controllers
     insuranceController.initialize({
       redis,
-      receiveEmitter,
+      channel,
       quotes,
-      bookings,
-      channel
+      bookings
     });
     
     // Register controllers
@@ -394,4 +404,4 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Export for testing
-export { app, redis, receiveEmitter };
+export { app, redis };
