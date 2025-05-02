@@ -3,10 +3,10 @@ import { jest } from '@jest/globals';
 import { mockDatabase, mockQuote, mockBooking, mockCertificate } from '../../mocks/db.mock.js';
 
 // Mock the database module
-jest.mock('../../../database/index.js', () => mockDatabase);
+jest.mock('../../backend/database/index.js', () => mockDatabase);
 
 // Import the service to test after mocking
-import DatabaseService from '../../../src/services/databaseService.js';
+import DatabaseService from '../../backend/src/services/databaseService.js';
 
 describe('DatabaseService', () => {
   beforeEach(() => {

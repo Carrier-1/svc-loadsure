@@ -1,7 +1,7 @@
 // backend/__tests__/controllers/insuranceController.test.js
 
 // Mock all dependencies
-jest.mock('../../database/index.js', () => ({
+jest.mock('../../backend/database/index.js', () => ({
     models: {
       Quote: {
         findOne: jest.fn(),
@@ -28,7 +28,7 @@ jest.mock('../../database/index.js', () => ({
     }
   }));
   
-  jest.mock('../../src/services/databaseService.js', () => ({
+  jest.mock('../../backend/src/services/databaseService.js', () => ({
     getQuote: jest.fn(),
     getBooking: jest.fn(),
     getCertificate: jest.fn(),

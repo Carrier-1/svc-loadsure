@@ -27,7 +27,7 @@ describe('Quote Model', () => {
   
   beforeAll(async () => {
     // Import the Quote model definition
-    const defineQuoteModel = (await import('../../../../backend/database/models/Quote.js')).default;
+    const defineQuoteModel = (await import('../../backend/backend/database/models/Quote.js')).default;
     
     // Define the model with the mock Sequelize instance
     Quote = defineQuoteModel(mockSequelize);

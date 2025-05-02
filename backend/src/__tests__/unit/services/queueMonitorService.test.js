@@ -1,7 +1,7 @@
 // __tests__/services/queueMonitorService.test.js
 
 import { jest } from '@jest/globals';
-import QueueMonitorService from '../../src/services/queueMonitorService.js';
+import QueueMonitorService from '../../backend/src/services/queueMonitorService.js';
 
 // Mock dependencies
 jest.mock('amqplib', () => ({

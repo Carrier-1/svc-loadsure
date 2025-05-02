@@ -6,8 +6,8 @@ process.env.DB_DIALECT = 'sqlite';
 process.env.DB_STORAGE = ':memory:';
 process.env.RABBITMQ_URL = 'amqp://localhost';
 process.env.REDIS_URL = 'redis://localhost:6379';
-process.env.LOADSURE_API_KEY = 'test-api-key';
-process.env.LOADSURE_BASE_URL = 'https://test-api.loadsure.net';
+process.env.LOADSURE_API_KEY = 'MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN';
+process.env.LOADSURE_BASE_URL = 'https://portal.loadsure.net';
 
 // Add global jest timeout
 jest.setTimeout(30000);

@@ -69,7 +69,7 @@ jest.mock('node-cache', () => {
 });
 
 // Import the service to test after mocking
-import supportDataService from '../../../src/services/supportDataService.js';
+import supportDataService from '../../backend/backend/src/services/supportDataService.js';
 
 describe('SupportDataService', () => {
   beforeEach(() => {

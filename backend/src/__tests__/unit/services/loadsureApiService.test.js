@@ -1,11 +1,11 @@
 // backend/src/__tests__/unit/services/loadsureApiService.test.js
 import { jest } from '@jest/globals';
-import supportDataService from '../../../../src/services/supportDataService.js';
-import LoadsureApiService from '../../../../src/services/loadsureApiService.js';
+import supportDataService from '../../backend/src/services/supportDataService.js';
+import LoadsureApiService from '../../backend/src/services/loadsureApiService.js';
 
 // Mock the external dependencies
 jest.mock('node-fetch');
-jest.mock('../../../../src/services/supportDataService.js');
+jest.mock('../../backend/src/services/supportDataService.js');
 
 // Sample API key and base URL for testing
 const API_KEY = 'MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN';

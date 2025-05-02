@@ -66,6 +66,7 @@ backend/node_modules/
 backend/dist/
 backend/data/
 backend/.env
+backend/coverage/
 
 # Frontend specific
 frontend/node_modules/
