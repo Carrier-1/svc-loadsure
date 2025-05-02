@@ -1,7 +1,7 @@
 // backend/__tests__/controllers/insuranceController.test.js
 
 // Mock all dependencies
-jest.mock('../../backend/database/index.js', () => ({
+jest.mock('../../../database/index.js', () => ({
     models: {
       Quote: {
         findOne: jest.fn(),
@@ -28,7 +28,7 @@ jest.mock('../../backend/database/index.js', () => ({
     }
   }));
   
-  jest.mock('../../backend/src/services/databaseService.js', () => ({
+  jest.mock('../../../services/databaseService.js', () => ({
     getQuote: jest.fn(),
     getBooking: jest.fn(),
     getCertificate: jest.fn(),
@@ -39,7 +39,7 @@ jest.mock('../../backend/database/index.js', () => ({
     getStatistics: jest.fn()
   }));
   
-  jest.mock('../../src/services/loadsureApiService.js', () => {
+  jest.mock('../../../services/loadsureApiService.js', () => {
     return {
       default: jest.fn().mockImplementation(() => ({
         getCertificateDetails: jest.fn()
@@ -65,8 +65,8 @@ jest.mock('../../backend/database/index.js', () => ({
   };
   
   // Import the controller (after mocks are set up)
-  import { initialize, router } from '../../src/controllers/insuranceController.js';
-  import DatabaseService from '../../src/services/databaseService.js';
+  import { initialize, router } from '../../../controllers/insuranceController.js';
+  import DatabaseService from '../../../services/databaseService.js';
   
   // Mock Express request/response objects
   const mockRequest = (body = {}, params = {}, query = {}, headers = {}) => ({
@@ -594,7 +594,7 @@ jest.mock('../../backend/database/index.js', () => ({
         DatabaseService.getCertificate.mockRejectedValueOnce(new Error('Certificate not found'));
         
         // Mock the Loadsure API service
-        const LoadsureApiService = await import('../../src/services/loadsureApiService.js');
+        const LoadsureApiService = await import('../../../services/loadsureApiService.js');
         const mockApiInstance = LoadsureApiService.default.mock.results[0].value;
         mockApiInstance.getCertificateDetails.mockResolvedValue({
           certificateNumber,

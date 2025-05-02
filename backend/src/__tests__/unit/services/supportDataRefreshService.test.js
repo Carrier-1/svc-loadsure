@@ -1,12 +1,12 @@
 // backend/src/__tests__/unit/services/supportDataRefreshService.test.js
 import { jest } from '@jest/globals';
 import schedule from 'node-schedule';
-import supportDataService from '../../backend/src/services/supportDataService.js';
-import SupportDataRefreshService from '../../backend/src/services/supportDataRefreshService.js';
+import supportDataService from '../../../services/supportDataService.js';
+import SupportDataRefreshService from '../../../services/supportDataRefreshService.js';
 
 // Mock the dependencies
 jest.mock('node-schedule');
-jest.mock('../../backend/src/services/supportDataService.js');
+jest.mock('../../../services/supportDataService.js');
 
 describe('SupportDataRefreshService', () => {
   let refreshService;

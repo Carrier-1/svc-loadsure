@@ -1,5 +1,3 @@
-// backend/jest.setup.js
-
 // Set test environment variables
 process.env.NODE_ENV = 'test';
 process.env.DB_DIALECT = 'sqlite';
@@ -23,7 +21,7 @@ global.console = {
   // error: jest.fn(),
 };
 
-// Add global mocks
+// Add global mock for ioredis (needs to be a function for ESM)
 jest.mock('ioredis', () => {
   const redisMock = {
     get: jest.fn().mockResolvedValue(null),
@@ -40,6 +38,7 @@ jest.mock('ioredis', () => {
   return jest.fn(() => redisMock);
 });
 
+// Mock for amqplib
 jest.mock('amqplib', () => {
   const channelMock = {
     assertQueue: jest.fn().mockResolvedValue({}),
@@ -63,6 +62,25 @@ jest.mock('amqplib', () => {
     connect: jest.fn().mockResolvedValue(connectionMock),
   };
 });
+
+// Mock for node-fetch if used directly
+jest.mock('node-fetch', () => jest.fn().mockResolvedValue({
+  ok: true,
+  json: jest.fn().mockResolvedValue({}),
+  text: jest.fn().mockResolvedValue(''),
+}), { virtual: true });
+
+// Mock for fs module when needed
+jest.mock('fs', () => ({
+  existsSync: jest.fn().mockReturnValue(true),
+  mkdirSync: jest.fn(),
+  readFileSync: jest.fn().mockReturnValue('{}'),
+  writeFileSync: jest.fn(),
+  promises: {
+    readFile: jest.fn().mockResolvedValue('{}'),
+    writeFile: jest.fn().mockResolvedValue(),
+  }
+}), { virtual: true });
 
 // Clean up after all tests
 afterAll(() => {

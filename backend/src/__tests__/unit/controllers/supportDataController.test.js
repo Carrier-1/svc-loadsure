@@ -1,7 +1,7 @@
 // backend/__tests__/controllers/supportDataController.test.js
 
 // Mock dependencies
-jest.mock('../../src/services/supportDataService.js', () => ({
+jest.mock('../../../services/supportDataService.js', () => ({
     getCommodities: jest.fn(),
     getCommodityExclusions: jest.fn(),
     getEquipmentTypes: jest.fn(),
@@ -11,7 +11,7 @@ jest.mock('../../src/services/supportDataService.js', () => ({
     getLastUpdated: jest.fn()
   }));
   
-  jest.mock('../../src/services/supportDataRefreshService.js', () => ({
+  jest.mock('../../../services/supportDataRefreshService.js', () => ({
     refreshNow: jest.fn(),
     isActive: jest.fn(),
     getSchedule: jest.fn(),
@@ -19,9 +19,9 @@ jest.mock('../../src/services/supportDataService.js', () => ({
   }));
   
   // Import the controller (after mocks are set up)
-  import supportDataController from '../../src/controllers/supportDataController.js';
-  import supportDataService from '../../src/services/supportDataService.js';
-  import supportDataRefreshService from '../../src/services/supportDataRefreshService.js';
+  import supportDataController from '../../../controllers/supportDataController.js';
+  import supportDataService from '../../../services/supportDataService.js';
+  import supportDataRefreshService from '../../../services/supportDataRefreshService.js';
   
   // Mock Express request/response objects
   const mockRequest = (body = {}, params = {}, query = {}) => ({

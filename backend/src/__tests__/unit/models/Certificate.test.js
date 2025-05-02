@@ -27,8 +27,8 @@ describe('Certificate Model', () => {
   
   beforeAll(async () => {
     // Import the model definitions
-    const defineCertificateModel = (await import('../../backend/backend/database/models/Certificate.js')).default;
-    const defineBookingModel = (await import('../../backend/backend/database/models/Booking.js')).default;
+    const defineCertificateModel = (await import('../../../database/models/Certificate.js')).default;
+    const defineBookingModel = (await import('../../../database/models/Booking.js')).default;
     
     // Define the models with the mock Sequelize instance
     Certificate = defineCertificateModel(mockSequelize);

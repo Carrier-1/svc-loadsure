@@ -1,7 +1,7 @@
 // __tests__/services/queueMonitorService.test.js
 
 import { jest } from '@jest/globals';
-import QueueMonitorService from '../../backend/src/services/queueMonitorService.js';
+import QueueMonitorService from '../../../services/queueMonitorService.js';
 
 // Mock dependencies
 jest.mock('amqplib', () => ({
@@ -74,7 +74,7 @@ describe('QueueMonitorService', () => {
     };
     
     // Mock amqplib.connect to return our mock connection
-    const amqplib = require('amqplib');
+    import amqplib from "amqplib";
     amqplib.connect.mockResolvedValue(mockConnection);
   });
 
@@ -90,7 +90,7 @@ describe('QueueMonitorService', () => {
   });
 
   test('should connect to RabbitMQ when starting', async () => {
-    const amqplib = require('amqplib');
+    import amqplib from "amqplib";
     
     await queueMonitorService.start();
     
@@ -105,7 +105,7 @@ describe('QueueMonitorService', () => {
     mockChannel.assertQueue = jest.fn().mockResolvedValue(mockQueueInfo);
     
     // Mock exec for the Docker scale command
-    const childProcess = require('child_process');
+    import childProcess from "child_process";
     childProcess.exec.mockImplementation((command, callback) => {
       if (callback) callback(null, { stdout: 'Scaled', stderr: '' });
       return { stdout: 'Scaled', stderr: '' };
@@ -130,7 +130,7 @@ describe('QueueMonitorService', () => {
     mockChannel.assertQueue = jest.fn().mockResolvedValue(mockQueueInfo);
     
     // Mock exec for the Docker scale command
-    const childProcess = require('child_process');
+    import childProcess from "child_process";
     childProcess.exec.mockImplementation((command, callback) => {
       if (callback) callback(null, { stdout: 'Scaled', stderr: '' });
       return { stdout: 'Scaled', stderr: '' };
@@ -167,7 +167,7 @@ describe('QueueMonitorService', () => {
     mockChannel.assertQueue = jest.fn().mockResolvedValue(mockQueueInfo);
     
     // Mock exec for the Docker scale command
-    const childProcess = require('child_process');
+    import childProcess from "child_process";
     
     // Action
     await queueMonitorService.start();
@@ -185,7 +185,7 @@ describe('QueueMonitorService', () => {
     mockChannel.assertQueue = jest.fn().mockResolvedValue(mockQueueInfo);
     
     // Mock exec for the Docker scale command
-    const childProcess = require('child_process');
+    import childProcess from "child_process";
     
     // Action
     await queueMonitorService.start();

@@ -1,6 +1,6 @@
 // backend/src/__tests__/unit/services/supportDataService.test.js
 import { jest } from '@jest/globals';
-import { mockCommodities, mockEquipmentTypes, mockFreightClasses } from '../../mocks/supportData.mock.js';
+import { mockCommodities, mockEquipmentTypes, mockFreightClasses } from '../../../mocks/supportData.mock.js';
 
 // Mock fs and node-fetch modules
 jest.mock('fs', () => ({
@@ -69,7 +69,7 @@ jest.mock('node-cache', () => {
 });
 
 // Import the service to test after mocking
-import supportDataService from '../../backend/backend/src/services/supportDataService.js';
+import supportDataService from '../../../../services/supportDataService.js';
 
 describe('SupportDataService', () => {
   beforeEach(() => {

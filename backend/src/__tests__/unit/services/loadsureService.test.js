@@ -32,7 +32,7 @@ jest.mock('ioredis', () => {
   }));
 });
 
-jest.mock('../../backend/src/services/databaseService.js', () => ({
+jest.mock('../../../services/databaseService.js', () => ({
   __esModule: true,
   default: {
     initialize: jest.fn().mockResolvedValue(true),
@@ -42,7 +42,7 @@ jest.mock('../../backend/src/services/databaseService.js', () => ({
   }
 }));
 
-jest.mock('../../backend/src/services/loadsureApiService.js', () => {
+jest.mock('../../../services/loadsureApiService.js', () => {
   return {
     __esModule: true,
     default: jest.fn().mockImplementation(() => ({
@@ -74,7 +74,7 @@ jest.mock('../../backend/src/services/loadsureApiService.js', () => {
   };
 });
 
-jest.mock('../../backend/src/config.js', () => ({
+jest.mock('../../../config.js', () => ({
   __esModule: true,
   default: {
     QUEUE_QUOTE_REQUESTED: 'quote-requested',
@@ -87,7 +87,7 @@ jest.mock('../../backend/src/config.js', () => ({
 }));
 
 // Import after mocks are set up
-import { startService, shutdown } from '../../backend/src/services/loadsureService.js';
+import { startService, shutdown } from '../../../services/loadsureService.js';
 
 describe('LoadsureService', () => {
   let mockChannel;
@@ -133,12 +133,12 @@ describe('LoadsureService', () => {
       }
     };
     
-    const Redis = require('ioredis');
+    import Redis from "ioredis";
     mockRedis = new Redis();
     mockRedis.exists.mockResolvedValue(0); // Not being processed
     
     // Get references to the mocked modules
-    const amqplib = require('amqplib');
+    import amqplib from "amqplib";
     amqplib.connect.mockResolvedValue(mockConnection);
     
     // Initialize the service
@@ -152,7 +152,7 @@ describe('LoadsureService', () => {
   });
 
   test('should initialize correctly', async () => {
-    const amqplib = require('amqplib');
+    import amqplib from "amqplib";
     
     // Verify RabbitMQ connection
     expect(amqplib.connect).toHaveBeenCalled();
@@ -167,8 +167,8 @@ describe('LoadsureService', () => {
   });
 
   test('should process quote requests properly', async () => {
-    const DatabaseService = require('../../backend/src/services/databaseService.js').default;
-    const LoadsureApiService = require('../../backend/src/services/loadsureApiService.js').default;
+    import DatabaseService from "../../../services/databaseService.js".default;
+    import LoadsureApiService from "../../../services/loadsureApiService.js".default;
     
     // Create a mock message
     const mockMessage = {
@@ -203,8 +203,8 @@ describe('LoadsureService', () => {
   });
 
   test('should handle errors during quote processing', async () => {
-    const DatabaseService = require('../../backend/src/services/databaseService.js').default;
-    const LoadsureApiService = require('../../backend/src/services/loadsureApiService.js').default;
+    import DatabaseService from "../../../services/databaseService.js".default;
+    import LoadsureApiService from "../../../services/loadsureApiService.js".default;
     
     // Make the API throw an error
     const apiInstance = LoadsureApiService.mock.instances[0];
@@ -229,8 +229,8 @@ describe('LoadsureService', () => {
   });
 
   test('should process booking requests properly', async () => {
-    const DatabaseService = require('../../backend/src/services/databaseService.js').default;
-    const LoadsureApiService = require('../../backend/src/services/loadsureApiService.js').default;
+    import DatabaseService from "../../../services/databaseService.js".default;
+    import LoadsureApiService from "../../../services/loadsureApiService.js".default;
     
     // Create a booking request message
     const bookingRequestContent = {
@@ -273,8 +273,8 @@ describe('LoadsureService', () => {
   });
 
   test('should handle errors during booking processing', async () => {
-    const DatabaseService = require('../../backend/src/services/databaseService.js').default;
-    const LoadsureApiService = require('../../backend/src/services/loadsureApiService.js').default;
+    import DatabaseService from "../../../services/databaseService.js".default;
+    import LoadsureApiService from "../../../services/loadsureApiService.js".default;
     
     // Create a booking request message
     const bookingRequestContent = {
@@ -322,7 +322,7 @@ describe('LoadsureService', () => {
   });
 
   test('should handle duplicate request processing', async () => {
-    const LoadsureApiService = require('../../backend/src/services/loadsureApiService.js').default;
+    import LoadsureApiService from "../../../services/loadsureApiService.js".default;
     
     // Make Redis indicate the request is already being processed
     mockRedis.exists.mockResolvedValueOnce(1);
