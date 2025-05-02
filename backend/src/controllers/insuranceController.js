@@ -25,8 +25,6 @@ const router = express.Router();
 let redis;
 let receiveEmitter;
 let channel;
-let quotes;
-let bookings;
 
 /**
  * Initialize the controller with dependencies
@@ -36,8 +34,6 @@ function initialize(dependencies) {
   redis = dependencies.redis;
   receiveEmitter = dependencies.receiveEmitter;
   channel = dependencies.channel;
-  quotes = dependencies.quotes || new Map();
-  bookings = dependencies.bookings || new Map();
   
   // Import models
   importModels().catch(console.error);
@@ -207,7 +203,8 @@ router.post('/quotes', async (req, res) => {
   console.log(`Storing request ${requestId} in Redis with 60s expiry`);
   await redis.set(`pending:${requestId}`, JSON.stringify({ 
     timestamp: Date.now(),
-    instanceId
+    instanceId,
+    type: 'quote'
   }), 'EX', 60);
   
   // Set up handler for this specific request
@@ -424,7 +421,8 @@ router.post('/quotes/simple', async (req, res) => {
   console.log(`Storing simple quote request ${requestId} in Redis with 60s expiry`);
   await redis.set(`pending:${requestId}`, JSON.stringify({ 
     timestamp: Date.now(),
-    instanceId
+    instanceId,
+    type: 'quote'
   }), 'EX', 60);
   
   // Set up handler for this specific request
@@ -742,7 +740,8 @@ router.post('/bookings', async (req, res) => {
   console.log(`Storing booking request ${requestId} in Redis with 60s expiry`);
   await redis.set(`pending:${requestId}`, JSON.stringify({ 
     timestamp: Date.now(),
-    instanceId
+    instanceId,
+    type: 'booking'
   }), 'EX', 60);
   
   // Set up handler for this specific request
@@ -966,7 +965,9 @@ router.get('/certificates/list', async (req, res) => {
  */
 router.post('/certificates', async (req, res) => {
   const { certificateNumber, userId } = req.body;
-  
+  const requestId = uuidv4();
+  const instanceId = process.env.HOSTNAME || 'unknown-instance';
+
   // Basic validation
   if (!certificateNumber || !userId) {
     return res.status(400).json({
@@ -975,10 +976,22 @@ router.post('/certificates', async (req, res) => {
     });
   }
   
+  // Store request info in Redis for tracking (key will automatically expire after 60 seconds)
+  console.log(`Storing certificate request ${requestId} in Redis with 60s expiry`);
+  await redis.set(`pending:${requestId}`, JSON.stringify({ 
+    timestamp: Date.now(),
+    instanceId,
+    type: 'certificate',
+    certificateNumber
+  }), 'EX', 60);
+
   try {
     // Check if certificate exists in database
     try {
       const certificate = await DatabaseService.getCertificate(certificateNumber);
+
+      // Clean up Redis key
+      await redis.del(`pending:${requestId}`);
       
       // Return certificate from database
       return res.json({
@@ -1013,6 +1026,9 @@ router.post('/certificates', async (req, res) => {
       certificateNumber, 
       userId 
     });
+
+    // Clean up Redis key
+    await redis.del(`pending:${requestId}`);
     
     // Format response
     res.json({
@@ -1029,6 +1045,10 @@ router.post('/certificates', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching certificate details:', error);
+
+    // Clean up Redis key
+    await redis.del(`pending:${requestId}`);
+
     res.status(500).json({
       error: 'Failed to retrieve certificate details',
       message: error.message,
