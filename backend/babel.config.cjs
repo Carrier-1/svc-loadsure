@@ -1,4 +1,4 @@
-// backend/babel.config.cjs
+// babel.config.cjs
 module.exports = {
   presets: [
     [

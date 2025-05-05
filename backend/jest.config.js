@@ -6,35 +6,29 @@ export default {
   moduleFileExtensions: ['js', 'json'],
   rootDir: './',
   testEnvironment: 'node',
-  testMatch: ['**/__tests__/**/*.js', '**/?(*.)+(spec|test).js'],
-  collectCoverage: true,
-  collectCoverageFrom: [
-    'src/**/*.js',
-    '!src/index.js',
-    '!src/swagger.js',
-    '!**/__tests__/**',
-    '!**/node_modules/**',
-  ],
-  coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'clover'],
-  clearMocks: true,
+  testMatch: ['**/__tests__/**/*.test.js', '**/?(*.)+(spec|test).js'],
+  collectCoverage: false, // Set to false initially for faster testing
+  testPathIgnorePatterns: ['/node_modules/'],
+  
+  // Add setup file to run before tests
   setupFilesAfterEnv: ['./jest.setup.js'],
   
-  // Fix module resolution - this handles explicit .js extensions in imports
+  // Fix module resolution for ES modules
   moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1',
+    "/^(\.{1,2}\/.*)\.js$/": "$1"   
   },
   
-  // Critical for handling node-fetch and other ESM dependencies
+  // Handle ESM dependencies
   transformIgnorePatterns: [
-    "/node_modules/(?!node-fetch|fetch-blob|data-uri-to-buffer|formdata-polyfill)"
-  ],
-  
-  // Exclude node_modules from test search
-  testPathIgnorePatterns: [
-    "/node_modules/"
+    '/node_modules/(?!node-fetch|fetch-blob|data-uri-to-buffer|formdata-polyfill)'
   ],
   
   // Increase timeout for tests
-  testTimeout: 30000
+  testTimeout: 10000,
+
+  // Set module directories to help with path resolution
+  moduleDirectories: ['node_modules', 'src'],
+  
+  // Root directories for module resolution
+  roots: ['<rootDir>/src']
 }
