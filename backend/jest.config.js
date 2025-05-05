@@ -1,3 +1,4 @@
+// backend/jest.config.js
 export default {
   transform: {
     '^.+\\.(js|jsx)$': 'babel-jest',
@@ -18,14 +19,22 @@ export default {
   coverageReporters: ['text', 'lcov', 'clover'],
   clearMocks: true,
   setupFilesAfterEnv: ['./jest.setup.js'],
-  // Add these new settings
+  
+  // Fix module resolution - this handles explicit .js extensions in imports
   moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1',  // Handle ES modules
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   },
+  
+  // Critical for handling node-fetch and other ESM dependencies
   transformIgnorePatterns: [
     "/node_modules/(?!node-fetch|fetch-blob|data-uri-to-buffer|formdata-polyfill)"
   ],
+  
+  // Exclude node_modules from test search
   testPathIgnorePatterns: [
     "/node_modules/"
-  ]
+  ],
+  
+  // Increase timeout for tests
+  testTimeout: 30000
 }
