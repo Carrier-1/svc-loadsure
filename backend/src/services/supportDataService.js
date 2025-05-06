@@ -1,11 +1,10 @@
-// File: src/services/supportDataService.js
-
+// backend/src/services/supportDataService.js
+import Redis from 'ioredis';
 import { promisify } from 'util';
-import fs from 'fs';
-import path from 'path';
 import { fileURLToPath } from 'url';
-import NodeCache from 'node-cache';
+import path from 'path';
 import config from '../config.js';
+import { sequelize, Sequelize } from '../../database/index.js';
 
 // Get __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -15,35 +14,73 @@ const __dirname = path.dirname(__filename);
 let fetch;
 
 /**
+ * Initialize fetch with dynamic import
+ */
+async function initializeFetch() {
+  try {
+    // Dynamically import node-fetch
+    const module = await import('node-fetch');
+    fetch = module.default;
+    console.log('Fetch initialized successfully in SupportDataService');
+  } catch (error) {
+    console.error('Error initializing fetch in SupportDataService:', error);
+    // Fallback to try again with another approach
+    try {
+      const module = await import('node-fetch');
+      fetch = module.default;
+      console.log('Fetch initialized using fallback in SupportDataService');
+    } catch (e) {
+      console.error('Failed to initialize fetch using fallback in SupportDataService:', e);
+    }
+  }
+}
+
+/**
  * Service for fetching, caching, and managing Loadsure support data
  * This includes commodities, equipment types, freight classes, etc.
+ * Uses PostgreSQL for persistence and Redis for caching
  */
 class SupportDataService {
   constructor(apiKey, baseUrl, options = {}) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
     
-    // Initialize cache with TTL (time-to-live) in seconds
-    this.cache = new NodeCache({
-      stdTTL: options.cacheTTL || 3600, // Default 1 hour
-      checkperiod: options.checkPeriod || 120, // Check for expired keys every 2 minutes
-      useClones: false // Don't clone objects on get/set for better performance
+    // Initialize Redis client
+    this.redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379', {
+      keyPrefix: 'loadsure:support:',
+      maxRetriesPerRequest: 3,
+      connectTimeout: 5000,
+      lazyConnect: true, // Don't connect immediately
+      retryStrategy(times) {
+        const delay = Math.min(times * 100, 3000);
+        return delay;
+      }
     });
     
-    // Create data directory if it doesn't exist
-    this.dataDir = options.dataDir || path.join(__dirname, '../../../data');
-    if (!fs.existsSync(this.dataDir)) {
-      try {
-        fs.mkdirSync(this.dataDir, { recursive: true });
-        console.log(`Created data directory: ${this.dataDir}`);
-      } catch (error) {
-        console.error(`Failed to create data directory: ${error.message}`);
-      }
-    }
+    // Cache TTL in seconds
+    this.cacheTTL = options.cacheTTL || 3600; // Default 1 hour
     
-    // Promisify file operations
-    this.writeFile = promisify(fs.writeFile);
-    this.readFile = promisify(fs.readFile);
+    // Define table names for each data type
+    this.tables = {
+      commodities: 'SupportCommodities',
+      commodityExclusions: 'SupportCommodityExclusions',
+      equipmentTypes: 'SupportEquipmentTypes',
+      loadTypes: 'SupportLoadTypes',
+      freightClasses: 'SupportFreightClasses',
+      termsOfSales: 'SupportTermsOfSales',
+      lastUpdated: 'SupportLastUpdated'
+    };
+    
+    // Define Redis cache keys
+    this.cacheKeys = {
+      commodities: 'commodities',
+      commodityExclusions: 'commodityExclusions',
+      equipmentTypes: 'equipmentTypes',
+      loadTypes: 'loadTypes',
+      freightClasses: 'freightClasses',
+      termsOfSales: 'termsOfSales',
+      lastUpdated: 'lastUpdated'
+    };
     
     // Support data endpoints
     this.endpoints = {
@@ -55,15 +92,26 @@ class SupportDataService {
       termsOfSales: '/api/termsOfSales'
     };
     
-    // Cache keys
-    this.cacheKeys = {
-      commodities: 'loadsure_commodities',
-      commodityExclusions: 'loadsure_commodity_exclusions',
-      equipmentTypes: 'loadsure_equipment_types',
-      loadTypes: 'loadsure_load_types',
-      freightClasses: 'loadsure_freight_classes',
-      termsOfSales: 'loadsure_terms_of_sales',
-      lastUpdated: 'loadsure_support_data_last_updated'
+    // Default freight class to commodity mappings
+    this.defaultFreightClassMappings = {
+      '50': 16,  // Medical Equipment / Medical Supplies
+      '55': 8,   // Building materials
+      '60': 12,  // Car Accessories
+      '65': 12,  // Car Parts
+      '70': 2,   // Food Items
+      '77.5': 22, // Tires
+      '85': 15,  // Machinery
+      '92.5': 7,  // Computers
+      '100': 7,   // Electronics
+      '110': 7,   // Electronics
+      '125': 7,   // Electronics
+      '150': 19,  // Metal products
+      '175': 10,  // Clothing
+      '200': 19,  // Metal
+      '250': 14,  // Furniture
+      '300': 14,  // Furniture
+      '400': 1,   // Misc
+      '500': 10   // Clothing
     };
     
     // Initialize fetch
@@ -74,26 +122,297 @@ class SupportDataService {
    * Initialize fetch with dynamic import
    */
   async initializeFetch() {
-    try {
-      // Dynamically import node-fetch
-      const module = await import('node-fetch');
-      fetch = module.default;
-      console.log('Fetch initialized successfully');
-    } catch (error) {
-      console.error('Error initializing fetch:', error);
-      // Fallback to try again
-      try {
-        const fetchModule = await import('node-fetch');
-        fetch = fetchModule.default;
-        console.log('Fetch initialized using fallback method');
-      } catch (e) {
-        console.error('Failed to initialize fetch using fallback:', e);
-      }
+    if (!fetch) {
+      await initializeFetch();
     }
   }
 
   /**
-   * Fetch all support data from Loadsure API and update cache and persistent storage
+   * Initialize the service by ensuring tables exist and loading cached data
+   * @returns {Promise<void>}
+   */
+  async initialize() {
+    console.log('Initializing Support Data Service...');
+    
+    try {
+      // Make sure fetch is initialized
+      if (!fetch) {
+        await this.initializeFetch();
+      }
+      
+      // Connect to Redis
+      await this.redis.connect().catch(err => {
+        console.warn('Could not connect to Redis:', err.message);
+        console.warn('SupportDataService will continue without caching');
+      });
+      
+      // Ensure database tables exist
+      await this.ensureTables();
+      
+      // Check if we need to refresh data
+      const lastUpdated = await this.getLastUpdatedFromDb();
+      
+      if (!lastUpdated) {
+        console.log('No support data found in database, fetching from API...');
+        await this.fetchAndUpdateAllSupportData();
+      } else {
+        console.log(`Support data last updated: ${lastUpdated}`);
+        
+        // If last update was more than 24 hours ago, refresh the data
+        const lastUpdateTime = new Date(lastUpdated).getTime();
+        const currentTime = new Date().getTime();
+        const timeDiff = currentTime - lastUpdateTime;
+        
+        if (timeDiff > 24 * 60 * 60 * 1000) {
+          console.log('Support data is more than 24 hours old, refreshing...');
+          await this.fetchAndUpdateAllSupportData();
+        } else {
+          // Load data from database to Redis cache
+          await this.loadDataToCache();
+        }
+      }
+      
+      console.log('Support Data Service initialized successfully');
+    } catch (error) {
+      console.error('Error initializing Support Data Service:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Ensure the necessary database tables exist
+   * @returns {Promise<void>}
+   */
+  async ensureTables() {
+    try {
+      // Define models dynamically if they don't exist
+      // SupportCommodities table
+      if (!sequelize.models.SupportCommodities) {
+        sequelize.define('SupportCommodities', {
+          id: {
+            type: Sequelize.INTEGER,
+            primaryKey: true
+          },
+          name: Sequelize.STRING,
+          description: Sequelize.TEXT,
+          data: Sequelize.JSONB
+        }, {
+          freezeTableName: true
+        });
+      }
+      
+      // SupportCommodityExclusions table
+      if (!sequelize.models.SupportCommodityExclusions) {
+        sequelize.define('SupportCommodityExclusions', {
+          id: {
+            type: Sequelize.STRING,
+            primaryKey: true
+          },
+          commodityId: Sequelize.INTEGER,
+          description: Sequelize.TEXT,
+          data: Sequelize.JSONB
+        }, {
+          freezeTableName: true
+        });
+      }
+      
+      // SupportEquipmentTypes table
+      if (!sequelize.models.SupportEquipmentTypes) {
+        sequelize.define('SupportEquipmentTypes', {
+          id: {
+            type: Sequelize.INTEGER,
+            primaryKey: true
+          },
+          name: Sequelize.STRING,
+          description: Sequelize.TEXT,
+          data: Sequelize.JSONB
+        }, {
+          freezeTableName: true
+        });
+      }
+      
+      // SupportLoadTypes table
+      if (!sequelize.models.SupportLoadTypes) {
+        sequelize.define('SupportLoadTypes', {
+          id: {
+            type: Sequelize.STRING,
+            primaryKey: true
+          },
+          name: Sequelize.STRING,
+          description: Sequelize.TEXT,
+          data: Sequelize.JSONB
+        }, {
+          freezeTableName: true
+        });
+      }
+      
+      // SupportFreightClasses table
+      if (!sequelize.models.SupportFreightClasses) {
+        sequelize.define('SupportFreightClasses', {
+          id: {
+            type: Sequelize.STRING,
+            primaryKey: true
+          },
+          name: Sequelize.STRING,
+          description: Sequelize.TEXT,
+          data: Sequelize.JSONB
+        }, {
+          freezeTableName: true
+        });
+      }
+      
+      // SupportTermsOfSales table
+      if (!sequelize.models.SupportTermsOfSales) {
+        sequelize.define('SupportTermsOfSales', {
+          id: {
+            type: Sequelize.STRING,
+            primaryKey: true
+          },
+          name: Sequelize.STRING,
+          description: Sequelize.TEXT,
+          data: Sequelize.JSONB
+        }, {
+          freezeTableName: true
+        });
+      }
+      
+      // SupportLastUpdated table
+      if (!sequelize.models.SupportLastUpdated) {
+        sequelize.define('SupportLastUpdated', {
+          id: {
+            type: Sequelize.INTEGER,
+            primaryKey: true,
+            defaultValue: 1
+          },
+          timestamp: Sequelize.DATE
+        }, {
+          freezeTableName: true
+        });
+      }
+      
+      // Sync models with database
+      await sequelize.sync();
+      console.log('Support Data tables synchronized with database');
+    } catch (error) {
+      console.error('Error ensuring tables exist:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Load all data from database to Redis cache
+   * @returns {Promise<void>}
+   */
+  async loadDataToCache() {
+    try {
+      console.log('Loading support data from database to cache...');
+      
+      // Load each data type from database to cache
+      for (const [type, tableName] of Object.entries(this.tables)) {
+        if (type === 'lastUpdated') continue; // Handle separately
+        
+        const model = sequelize.models[tableName];
+        if (!model) {
+          console.warn(`Model ${tableName} not found, skipping cache population`);
+          continue;
+        }
+        
+        const records = await model.findAll();
+        const data = records.map(record => {
+          // If record has data field, use it (contains the full object)
+          if (record.data) return record.data;
+          
+          // Otherwise construct object from fields
+          const { id, name, description, ...rest } = record.toJSON();
+          return { id, name, description, ...rest };
+        });
+        
+        // Store in Redis cache
+        const cacheKey = this.cacheKeys[type];
+        if (cacheKey && data.length > 0) {
+          await this.setCache(cacheKey, data);
+          console.log(`Loaded ${data.length} ${type} records to cache`);
+        }
+      }
+      
+      // Load last updated timestamp
+      const lastUpdated = await this.getLastUpdatedFromDb();
+      if (lastUpdated) {
+        await this.setCache(this.cacheKeys.lastUpdated, lastUpdated);
+      }
+      
+      console.log('Finished loading support data to cache');
+    } catch (error) {
+      console.error('Error loading data to cache:', error);
+      // Continue without caching
+    }
+  }
+  
+  /**
+   * Get data from Redis cache
+   * @param {String} key - Cache key
+   * @returns {Promise<any>} Cached data or null
+   */
+  async getCache(key) {
+    try {
+      const data = await this.redis.get(key);
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      console.warn(`Error getting ${key} from cache:`, error.message);
+      return null;
+    }
+  }
+  
+  /**
+   * Set data in Redis cache
+   * @param {String} key - Cache key
+   * @param {any} data - Data to cache
+   * @param {Number} ttl - Cache TTL in seconds (optional)
+   * @returns {Promise<void>}
+   */
+  async setCache(key, data, ttl = this.cacheTTL) {
+    try {
+      await this.redis.set(key, JSON.stringify(data), 'EX', ttl);
+    } catch (error) {
+      console.warn(`Error setting ${key} in cache:`, error.message);
+      // Continue without caching
+    }
+  }
+  
+  /**
+   * Get last updated timestamp from database
+   * @returns {Promise<String|null>} ISO timestamp string or null
+   */
+  async getLastUpdatedFromDb() {
+    try {
+      const model = sequelize.models[this.tables.lastUpdated];
+      const record = await model.findOne({ where: { id: 1 } });
+      return record ? record.timestamp.toISOString() : null;
+    } catch (error) {
+      console.warn('Error getting last updated from database:', error.message);
+      return null;
+    }
+  }
+  
+  /**
+   * Update last updated timestamp in database
+   * @param {Date} timestamp - Timestamp to set
+   * @returns {Promise<void>}
+   */
+  async updateLastUpdatedInDb(timestamp = new Date()) {
+    try {
+      const model = sequelize.models[this.tables.lastUpdated];
+      await model.upsert({
+        id: 1,
+        timestamp
+      });
+    } catch (error) {
+      console.error('Error updating last updated in database:', error.message);
+    }
+  }
+
+  /**
+   * Fetch all support data from Loadsure API and update database and cache
    * @returns {Promise<Object>} Support data result
    */
   async fetchAndUpdateAllSupportData() {
@@ -115,22 +434,73 @@ class SupportDataService {
         const data = await this.fetchFromLoadsureAPI(endpoint);
         results[key] = data;
         
-        // Update cache
-        this.cache.set(this.cacheKeys[key], data);
+        // Save to database
+        await this.saveToDatabase(key, data);
         
-        // Update persistent storage
-        await this.persistToFile(key, data);
+        // Update cache
+        await this.setCache(this.cacheKeys[key], data);
       }
       
       // Update last updated timestamp
-      const now = new Date().toISOString();
-      this.cache.set(this.cacheKeys.lastUpdated, now);
-      await this.persistToFile('lastUpdated', { timestamp: now });
+      const now = new Date();
+      await this.updateLastUpdatedInDb(now);
+      await this.setCache(this.cacheKeys.lastUpdated, now.toISOString());
       
       console.log('All support data updated successfully');
       return results;
     } catch (error) {
       console.error('Error updating support data:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Save data to database
+   * @param {String} type - Data type
+   * @param {Array} data - Data to save
+   * @returns {Promise<void>}
+   */
+  async saveToDatabase(type, data) {
+    try {
+      const tableName = this.tables[type];
+      const model = sequelize.models[tableName];
+      
+      if (!model) {
+        console.warn(`Model ${tableName} not found, skipping database save`);
+        return;
+      }
+      
+      // Use transaction for atomicity
+      await sequelize.transaction(async (t) => {
+        // Clear existing data
+        await model.destroy({ truncate: true, transaction: t });
+        
+        // Insert new data
+        for (const item of data) {
+          // For items where id is not a simple type, store the full object in data field
+          // and use a generated id as the primary key
+          if (typeof item.id === 'object') {
+            await model.create({
+              id: `${type}_${Math.random().toString(36).substring(2, 10)}`,
+              name: item.name || '',
+              description: item.description || '',
+              data: item
+            }, { transaction: t });
+          } else {
+            // For simple items, spread the fields
+            await model.create({
+              id: item.id,
+              name: item.name || '',
+              description: item.description || '',
+              data: item
+            }, { transaction: t });
+          }
+        }
+      });
+      
+      console.log(`Saved ${data.length} ${type} records to database`);
+    } catch (error) {
+      console.error(`Error saving ${type} to database:`, error);
       throw error;
     }
   }
@@ -164,156 +534,193 @@ class SupportDataService {
       }
 
       const data = await response.json();
-      console.log(`Successfully fetched data from ${endpoint}`);
+      console.log(`Successfully fetched ${Array.isArray(data) ? data.length : 'some'} items from ${endpoint}`);
       return data;
     } catch (error) {
       console.error(`Error fetching from endpoint ${endpoint}:`, error);
       throw error;
     }
   }
-
-  /**
-   * Persist data to file
-   * @param {string} key - Data type key
-   * @param {Object} data - Data to persist
-   * @returns {Promise<void>}
-   */
-  async persistToFile(key, data) {
-    try {
-      const filePath = path.join(this.dataDir, `${key}.json`);
-      await this.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
-      console.log(`Data persisted to ${filePath}`);
-    } catch (error) {
-      console.error(`Error persisting ${key} to file:`, error);
-      // Don't throw error to continue processing other data
-    }
-  }
-
-  /**
-   * Load persisted data from file
-   * @param {string} key - Data type key
-   * @returns {Promise<Object>} Loaded data
-   */
-  async loadFromFile(key) {
-    try {
-      const filePath = path.join(this.dataDir, `${key}.json`);
-      const data = await this.readFile(filePath, 'utf8');
-      return JSON.parse(data);
-    } catch (error) {
-      console.warn(`Could not load ${key} from file:`, error.message);
-      return null;
-    }
-  }
-
-  /**
-   * Initialize the service by loading data from persistent storage to cache
-   * @returns {Promise<void>}
-   */
-  async initialize() {
-    console.log('Initializing Support Data Service...');
-    
-    // Make sure fetch is initialized
-    if (!fetch) {
-      await this.initializeFetch();
-    }
-    
-    // Load all data types from files to cache
-    for (const key of Object.keys(this.endpoints)) {
-      const data = await this.loadFromFile(key);
-      if (data) {
-        this.cache.set(this.cacheKeys[key], data);
-        console.log(`Loaded ${key} data from persistent storage`);
-      }
-    }
-    
-    // Check last update time
-    const lastUpdated = await this.loadFromFile('lastUpdated');
-    
-    if (lastUpdated) {
-      this.cache.set(this.cacheKeys.lastUpdated, lastUpdated.timestamp);
-      
-      // Check if data refresh is needed
-      const lastUpdateTime = new Date(lastUpdated.timestamp).getTime();
-      const currentTime = new Date().getTime();
-      const timeDiff = currentTime - lastUpdateTime;
-      
-      // If last update was more than 24 hours ago, refresh the data
-      if (timeDiff > 24 * 60 * 60 * 1000) {
-        console.log('Support data is more than 24 hours old, refreshing...');
-        await this.fetchAndUpdateAllSupportData();
-      }
-    } else {
-      // No previous data found, fetch fresh data
-      console.log('No persisted support data found, fetching from API...');
-      await this.fetchAndUpdateAllSupportData();
-    }
-  }
-
+  
   /**
    * Get commodity data
-   * @returns {Array} Commodity data
+   * @returns {Promise<Array>} Commodity data
    */
-  getCommodities() {
-    return this.cache.get(this.cacheKeys.commodities) || [];
+  async getCommodities() {
+    // Try to get from cache first
+    const cached = await this.getCache(this.cacheKeys.commodities);
+    if (cached) return cached;
+    
+    // If not in cache, get from database
+    try {
+      const model = sequelize.models[this.tables.commodities];
+      const records = await model.findAll();
+      const data = records.map(record => record.data || record.toJSON());
+      
+      // Update cache
+      await this.setCache(this.cacheKeys.commodities, data);
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching commodities from database:', error);
+      return [];
+    }
   }
 
   /**
    * Get commodity exclusions data
-   * @returns {Array} Commodity exclusions data
+   * @returns {Promise<Array>} Commodity exclusions data
    */
-  getCommodityExclusions() {
-    return this.cache.get(this.cacheKeys.commodityExclusions) || [];
+  async getCommodityExclusions() {
+    // Try to get from cache first
+    const cached = await this.getCache(this.cacheKeys.commodityExclusions);
+    if (cached) return cached;
+    
+    // If not in cache, get from database
+    try {
+      const model = sequelize.models[this.tables.commodityExclusions];
+      const records = await model.findAll();
+      const data = records.map(record => record.data || record.toJSON());
+      
+      // Update cache
+      await this.setCache(this.cacheKeys.commodityExclusions, data);
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching commodity exclusions from database:', error);
+      return [];
+    }
   }
 
   /**
    * Get equipment types data
-   * @returns {Array} Equipment types data
+   * @returns {Promise<Array>} Equipment types data
    */
-  getEquipmentTypes() {
-    return this.cache.get(this.cacheKeys.equipmentTypes) || [];
+  async getEquipmentTypes() {
+    // Try to get from cache first
+    const cached = await this.getCache(this.cacheKeys.equipmentTypes);
+    if (cached) return cached;
+    
+    // If not in cache, get from database
+    try {
+      const model = sequelize.models[this.tables.equipmentTypes];
+      const records = await model.findAll();
+      const data = records.map(record => record.data || record.toJSON());
+      
+      // Update cache
+      await this.setCache(this.cacheKeys.equipmentTypes, data);
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching equipment types from database:', error);
+      return [];
+    }
   }
 
   /**
    * Get load types data
-   * @returns {Array} Load types data
+   * @returns {Promise<Array>} Load types data
    */
-  getLoadTypes() {
-    return this.cache.get(this.cacheKeys.loadTypes) || [];
+  async getLoadTypes() {
+    // Try to get from cache first
+    const cached = await this.getCache(this.cacheKeys.loadTypes);
+    if (cached) return cached;
+    
+    // If not in cache, get from database
+    try {
+      const model = sequelize.models[this.tables.loadTypes];
+      const records = await model.findAll();
+      const data = records.map(record => record.data || record.toJSON());
+      
+      // Update cache
+      await this.setCache(this.cacheKeys.loadTypes, data);
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching load types from database:', error);
+      return [];
+    }
   }
 
   /**
    * Get freight classes data
-   * @returns {Array} Freight classes data
+   * @returns {Promise<Array>} Freight classes data
    */
-  getFreightClasses() {
-    return this.cache.get(this.cacheKeys.freightClasses) || [];
+  async getFreightClasses() {
+    // Try to get from cache first
+    const cached = await this.getCache(this.cacheKeys.freightClasses);
+    if (cached) return cached;
+    
+    // If not in cache, get from database
+    try {
+      const model = sequelize.models[this.tables.freightClasses];
+      const records = await model.findAll();
+      const data = records.map(record => record.data || record.toJSON());
+      
+      // Update cache
+      await this.setCache(this.cacheKeys.freightClasses, data);
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching freight classes from database:', error);
+      return [];
+    }
   }
 
   /**
    * Get terms of sales data
-   * @returns {Array} Terms of sales data
+   * @returns {Promise<Array>} Terms of sales data
    */
-  getTermsOfSales() {
-    return this.cache.get(this.cacheKeys.termsOfSales) || [];
+  async getTermsOfSales() {
+    // Try to get from cache first
+    const cached = await this.getCache(this.cacheKeys.termsOfSales);
+    if (cached) return cached;
+    
+    // If not in cache, get from database
+    try {
+      const model = sequelize.models[this.tables.termsOfSales];
+      const records = await model.findAll();
+      const data = records.map(record => record.data || record.toJSON());
+      
+      // Update cache
+      await this.setCache(this.cacheKeys.termsOfSales, data);
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching terms of sales from database:', error);
+      return [];
+    }
   }
 
   /**
    * Get last updated timestamp
-   * @returns {string} ISO timestamp string
+   * @returns {Promise<string>} ISO timestamp string
    */
-  getLastUpdated() {
-    return this.cache.get(this.cacheKeys.lastUpdated);
+  async getLastUpdated() {
+    // Try to get from cache first
+    const cached = await this.getCache(this.cacheKeys.lastUpdated);
+    if (cached) return cached;
+    
+    // If not in cache, get from database
+    const fromDb = await this.getLastUpdatedFromDb();
+    if (fromDb) {
+      // Update cache
+      await this.setCache(this.cacheKeys.lastUpdated, fromDb);
+      return fromDb;
+    }
+    
+    return null;
   }
 
   /**
    * Map a freight class to a commodity ID
    * @param {string} freightClass - Freight class from our system
-   * @returns {number} Mapped commodity ID
+   * @returns {Promise<number>} Mapped commodity ID
    */
-  mapFreightClassToCommodity(freightClass) {
+  async mapFreightClassToCommodity(freightClass) {
     // Get freight classes and commodities
-    const freightClasses = this.getFreightClasses();
-    const commodities = this.getCommodities();
+    const freightClasses = await this.getFreightClasses();
+    const commodities = await this.getCommodities();
     
     // Find the freight class by ID or name
     const freightClassObj = freightClasses.find(fc => 
@@ -323,38 +730,24 @@ class SupportDataService {
     );
     
     // Default mapping based on known patterns if direct mapping not available
-    // You could extend this with more sophisticated logic
     if (!freightClassObj) {
-      // Default mapping fallback
-      const defaultMappings = {
-        '50': 16,  // Medical Equipment / Medical Supplies
-        '55': 8,   // Building materials
-        '60': 12,  // Car Accessories
-        '65': 12,  // Car Parts
-        '70': 2,   // Food Items
-        '77.5': 22, // Tires
-        '85': 15,  // Machinery
-        '92.5': 7,  // Computers
-        '100': 7,   // Electronics
-        '110': 7,   // Electronics
-        '125': 7,   // Electronics
-        '150': 19,  // Metal products
-        '175': 10,  // Clothing
-        '200': 19,  // Metal
-        '250': 14,  // Furniture
-        '300': 14,  // Furniture
-        '400': 1,   // Misc
-        '500': 10   // Clothing
-      };
+      // Use default mappings
+      const defaultMapping = this.defaultFreightClassMappings[freightClass];
+      if (defaultMapping) {
+        return defaultMapping;
+      }
       
-      return defaultMappings[freightClass] || 1; // Default to miscellaneous
+      // Default to miscellaneous
+      const misc = commodities.find(c => c.name.toLowerCase().includes('misc'));
+      return misc ? misc.id : 1;
     }
     
     // If we have a mapping system between freight classes and commodities,
     // we would implement that logic here
     
     // For now, return a default commodity ID (miscellaneous)
-    return 1;
+    const misc = commodities.find(c => c.name.toLowerCase().includes('misc'));
+    return misc ? misc.id : 1;
   }
 
   /**
@@ -362,9 +755,9 @@ class SupportDataService {
    * @param {string} freightClass - Freight class (e.g., "65" or "65.5")
    * @returns {string} Formatted freight class (e.g., "class65" or "class65_5")
    */
-  formatFreightClass(freightClass) {
+  async formatFreightClass(freightClass) {
     // Get freight classes to check proper format
-    const freightClasses = this.getFreightClasses();
+    const freightClasses = await this.getFreightClasses();
     
     // If the freight class already matches a known ID, return it
     if (freightClasses.find(fc => fc.id === freightClass)) {
@@ -374,6 +767,20 @@ class SupportDataService {
     // Otherwise format it according to Loadsure's convention
     return `class${freightClass.replace('.', '_')}`;
   }
+  
+  /**
+   * Close connections gracefully
+   * @returns {Promise<void>}
+   */
+  async close() {
+    try {
+      // Close Redis connection
+      await this.redis.quit();
+      console.log('Support Data Service: Redis connection closed');
+    } catch (error) {
+      console.error('Error closing Support Data Service connections:', error);
+    }
+  }
 }
 
 // Export singleton instance
@@ -381,8 +788,7 @@ const supportDataService = new SupportDataService(
   config.LOADSURE_API_KEY,
   config.LOADSURE_BASE_URL,
   {
-    cacheTTL: 3600, // 1 hour cache TTL
-    dataDir: path.join(__dirname, '../../../data')
+    cacheTTL: parseInt(process.env.SUPPORT_DATA_CACHE_TTL || '3600', 10) // 1 hour cache TTL
   }
 );
 

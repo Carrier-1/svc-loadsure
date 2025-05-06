@@ -38,9 +38,9 @@ const router = express.Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/commodities', (req, res) => {
+router.get('/commodities', async (req, res) => {
   try {
-    const commodities = supportDataService.getCommodities();
+    const commodities = await supportDataService.getCommodities();
     res.json(commodities);
   } catch (error) {
     console.error('Error fetching commodities:', error);
@@ -81,9 +81,9 @@ router.get('/commodities', (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/commodity-exclusions', (req, res) => {
+router.get('/commodity-exclusions', async (req, res) => {
   try {
-    const exclusions = supportDataService.getCommodityExclusions();
+    const exclusions = await supportDataService.getCommodityExclusions();
     res.json(exclusions);
   } catch (error) {
     console.error('Error fetching commodity exclusions:', error);
@@ -124,9 +124,9 @@ router.get('/commodity-exclusions', (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/equipment-types', (req, res) => {
+router.get('/equipment-types', async (req, res) => {
   try {
-    const equipmentTypes = supportDataService.getEquipmentTypes();
+    const equipmentTypes = await supportDataService.getEquipmentTypes();
     res.json(equipmentTypes);
   } catch (error) {
     console.error('Error fetching equipment types:', error);
@@ -167,9 +167,9 @@ router.get('/equipment-types', (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/load-types', (req, res) => {
+router.get('/load-types', async (req, res) => {
   try {
-    const loadTypes = supportDataService.getLoadTypes();
+    const loadTypes = await supportDataService.getLoadTypes();
     res.json(loadTypes);
   } catch (error) {
     console.error('Error fetching load types:', error);
@@ -210,9 +210,9 @@ router.get('/load-types', (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/freight-classes', (req, res) => {
+router.get('/freight-classes', async (req, res) => {
   try {
-    const freightClasses = supportDataService.getFreightClasses();
+    const freightClasses = await supportDataService.getFreightClasses();
     res.json(freightClasses);
   } catch (error) {
     console.error('Error fetching freight classes:', error);
@@ -253,9 +253,9 @@ router.get('/freight-classes', (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/terms-of-sales', (req, res) => {
+router.get('/terms-of-sales', async (req, res) => {
   try {
-    const termsOfSales = supportDataService.getTermsOfSales();
+    const termsOfSales = await supportDataService.getTermsOfSales();
     res.json(termsOfSales);
   } catch (error) {
     console.error('Error fetching terms of sales:', error);
@@ -284,23 +284,43 @@ router.get('/terms-of-sales', (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/status', (req, res) => {
+router.get('/status', async (req, res) => {
   try {
-    const lastUpdated = supportDataService.getLastUpdated();
+    const lastUpdated = await supportDataService.getLastUpdated();
     const refreshActive = supportDataRefreshService.isActive();
     const refreshSchedule = supportDataRefreshService.getSchedule();
+    
+    // Get health status
+    const healthStatus = await supportDataRefreshService.getHealthStatus();
+    
+    // Check data availability by getting counts
+    const commodities = await supportDataService.getCommodities();
+    const commodityExclusions = await supportDataService.getCommodityExclusions();
+    const equipmentTypes = await supportDataService.getEquipmentTypes();
+    const loadTypes = await supportDataService.getLoadTypes();
+    const freightClasses = await supportDataService.getFreightClasses();
+    const termsOfSales = await supportDataService.getTermsOfSales();
     
     res.json({
       lastUpdated,
       refreshActive,
       refreshSchedule,
+      healthStatus,
       dataAvailable: {
-        commodities: (supportDataService.getCommodities().length > 0),
-        commodityExclusions: (supportDataService.getCommodityExclusions().length > 0),
-        equipmentTypes: (supportDataService.getEquipmentTypes().length > 0),
-        loadTypes: (supportDataService.getLoadTypes().length > 0),
-        freightClasses: (supportDataService.getFreightClasses().length > 0),
-        termsOfSales: (supportDataService.getTermsOfSales().length > 0)
+        commodities: (commodities && commodities.length > 0),
+        commodityExclusions: (commodityExclusions && commodityExclusions.length > 0),
+        equipmentTypes: (equipmentTypes && equipmentTypes.length > 0),
+        loadTypes: (loadTypes && loadTypes.length > 0),
+        freightClasses: (freightClasses && freightClasses.length > 0),
+        termsOfSales: (termsOfSales && termsOfSales.length > 0)
+      },
+      counts: {
+        commodities: commodities ? commodities.length : 0,
+        commodityExclusions: commodityExclusions ? commodityExclusions.length : 0,
+        equipmentTypes: equipmentTypes ? equipmentTypes.length : 0,
+        loadTypes: loadTypes ? loadTypes.length : 0,
+        freightClasses: freightClasses ? freightClasses.length : 0,
+        termsOfSales: termsOfSales ? termsOfSales.length : 0
       }
     });
   } catch (error) {
@@ -356,10 +376,12 @@ router.get('/status', (req, res) => {
 router.post('/refresh', async (req, res) => {
   try {
     const result = await supportDataRefreshService.refreshNow();
+    const lastUpdated = await supportDataService.getLastUpdated();
+    
     res.json({
       success: true,
       message: 'Support data refreshed successfully',
-      lastUpdated: supportDataService.getLastUpdated(),
+      lastUpdated,
       dataCount: {
         commodities: result.commodities?.length || 0,
         commodityExclusions: result.commodityExclusions?.length || 0,
@@ -447,6 +469,52 @@ router.post('/schedule', (req, res) => {
       error: 'Failed to update refresh schedule',
       message: error.message
     });
+  }
+});
+
+/**
+ * @swagger
+ * /support-data/health:
+ *   get:
+ *     summary: Get system health status
+ *     description: Returns the health status of the support data system
+ *     tags: [Support Data]
+ *     responses:
+ *       200:
+ *         description: Health status successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 isRunning:
+ *                   type: boolean
+ *                 schedule:
+ *                   type: string
+ *                 dbHealth:
+ *                   type: boolean
+ *                 redisHealth:
+ *                   type: boolean
+ *                 lastUpdated:
+ *                   type: string
+ *                   format: date-time
+ *                 currentTime:
+ *                   type: string
+ *                   format: date-time
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get('/health', async (req, res) => {
+  try {
+    const healthStatus = await supportDataRefreshService.getHealthStatus();
+    res.json(healthStatus);
+  } catch (error) {
+    console.error('Error fetching health status:', error);
+    res.status(500).json({ error: 'Failed to fetch health status' });
   }
 });
 
