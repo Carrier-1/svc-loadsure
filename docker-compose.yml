@@ -161,7 +161,7 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL}
       - REDIS_URL=${REDIS_URL}
       - LOADSURE_API_KEY=${LOADSURE_API_KEY}
-      - LOADSURE_BASE_URL=${LOADSURE_BASE_URL}}
+      - LOADSURE_BASE_URL=${LOADSURE_BASE_URL}
       - NODE_OPTIONS=--experimental-vm-modules
       - DB_SSL=${DB_SSL:-false}
       - DB_DIALECT=${DB_DIALECT:-postgres}
