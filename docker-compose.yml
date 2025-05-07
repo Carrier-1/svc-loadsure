@@ -117,7 +117,6 @@ services:
     volumes:
       - ./backend:/usr/src/app
       - /usr/src/app/node_modules
-      - ./backend/data:/usr/src/app/data
     depends_on:
       db-setup:
         condition: service_completed_successfully
@@ -176,7 +175,6 @@ services:
     volumes:
       - ./backend:/usr/src/app
       - /usr/src/app/node_modules
-      - ./backend/data:/usr/src/app/data
     depends_on:
       api-service:
         condition: service_healthy

@@ -52,27 +52,27 @@ class LoadsureApiService {
   /**
    * Helper method to resolve commodity ID from freight class
    * @param {String} freightClass - Freight class
-   * @returns {Number} Commodity ID
+   * @returns {Promise<Number>} Commodity ID
    */
-  resolveCommodityIdFromFreightClass(freightClass) {
-    return supportDataService.mapFreightClassToCommodity(freightClass);
+  async resolveCommodityIdFromFreightClass(freightClass) {
+    return await supportDataService.mapFreightClassToCommodity(freightClass);
   }
   
   /**
    * Helper method to resolve default load type
-   * @returns {String} Default load type ID
+   * @returns {Promise<String>} Default load type ID
    */
-  resolveDefaultLoadType() {
-    const loadTypes = supportDataService.getLoadTypes();
+  async resolveDefaultLoadType() {
+    const loadTypes = await supportDataService.getLoadTypes();
     return loadTypes.length > 0 ? loadTypes[0].id : 'FULL_TRUCKLOAD_1';
   }
   
   /**
    * Helper method to resolve default equipment type
-   * @returns {Number} Default equipment type ID
+   * @returns {Promise<Number>} Default equipment type ID
    */
-  resolveDefaultEquipmentType() {
-    const equipmentTypes = supportDataService.getEquipmentTypes();
+  async resolveDefaultEquipmentType() {
+    const equipmentTypes = await supportDataService.getEquipmentTypes();
     // Default to dry van (equipment type 2) if not found in the support data
     return equipmentTypes.find(et => et.name.toLowerCase().includes('dry van'))?.id || 2;
   }
@@ -103,15 +103,17 @@ class LoadsureApiService {
       // Check if this is a complete payload or needs transformation
       let payload = freightDetails.shipment ? 
         freightDetails : // If it already has a shipment property, it's in the correct format
-        this.buildQuoteRequestPayload(freightDetails);
+        await this.buildQuoteRequestPayload(freightDetails);
       
       // Ensure equipment type is set for all carriers
       if (payload.shipment && payload.shipment.carriers && Array.isArray(payload.shipment.carriers)) {
-        payload.shipment.carriers.forEach(carrier => {
+        const defaultEquipmentType = await this.resolveDefaultEquipmentType();
+        
+        for (const carrier of payload.shipment.carriers) {
           if (!carrier.equipmentType) {
-            carrier.equipmentType = this.resolveDefaultEquipmentType();
+            carrier.equipmentType = defaultEquipmentType;
           }
-        });
+        }
       }
       
       // Log the payload for debugging
@@ -220,7 +222,8 @@ class LoadsureApiService {
     const formattedDeliveryDate = deliveryDate || nextWeek.toISOString().split('T')[0];
     
     // Get default equipment type ID
-    const defaultEquipmentTypeId = this.resolveDefaultEquipmentType();
+    const defaultEquipmentTypeId = await this.resolveDefaultEquipmentType();
+    const defaultLoadTypeId = await this.resolveDefaultLoadType();
     
     // Process freight classes
     let resolvedFreightClasses = [];
@@ -246,7 +249,7 @@ class LoadsureApiService {
       resolvedCommodities = [commodityId];
     } else if (freightClass) {
       // Fallback to mapping from freight class
-      resolvedCommodities = [this.resolveCommodityIdFromFreightClass(freightClass)];
+      resolvedCommodities = [await this.resolveCommodityIdFromFreightClass(freightClass)];
     }
     
     // Process carriers - Ensure equipmentType is always set
@@ -328,9 +331,6 @@ class LoadsureApiService {
       }
     };
     
-    // Resolve default load type
-    const defaultLoadType = this.resolveDefaultLoadType();
-    
     // Construct the full API payload
     const payload = {
       user,
@@ -356,7 +356,7 @@ class LoadsureApiService {
         },
         carriers: resolvedCarriers,
         stops: resolvedStops,
-        loadType: loadTypeId || defaultLoadType,
+        loadType: loadTypeId || defaultLoadTypeId,
         equipmentType: equipmentTypeId || defaultEquipmentTypeId,
         
         // Add integration fee fields if provided
@@ -421,9 +421,9 @@ class LoadsureApiService {
   /**
    * Build the quote request payload according to Loadsure API specifications
    * @param {Object} freightDetails - Freight details from our system
-   * @returns {Object} Formatted payload for Loadsure API
+   * @returns {Promise<Object>} Formatted payload for Loadsure API
    */
-  buildQuoteRequestPayload(freightDetails) {
+  async buildQuoteRequestPayload(freightDetails) {
     const {
       description,
       class: freightClass,
@@ -447,7 +447,7 @@ class LoadsureApiService {
     } = freightDetails;
 
     // Default equipment type ID
-    const defaultEquipmentTypeId = this.resolveDefaultEquipmentType();
+    const defaultEquipmentTypeId = await this.resolveDefaultEquipmentType();
     
     // Process freight classes
     let resolvedFreightClasses = [];
@@ -473,7 +473,7 @@ class LoadsureApiService {
       resolvedCommodities = [commodityId];
     } else if (freightClass) {
       // Fallback to mapping from freight class
-      resolvedCommodities = [supportDataService.mapFreightClassToCommodity(freightClass)];
+      resolvedCommodities = [await supportDataService.mapFreightClassToCommodity(freightClass)];
     }
     
     // Get equipment types from support data service
@@ -595,7 +595,7 @@ class LoadsureApiService {
     const assuredData = assured || defaultAssured;
     
     // Resolve default load type
-    const defaultLoadType = this.resolveDefaultLoadType();
+    const defaultLoadType = await this.resolveDefaultLoadType();
 
     // Construct the payload according to Loadsure API structure
     return {
