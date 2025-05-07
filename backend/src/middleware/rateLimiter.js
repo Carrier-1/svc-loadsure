@@ -21,7 +21,7 @@ const DEFAULT_OPTIONS = {
            'unknown';
   },
   // Redis connection options
-  redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+  redisUrl: config.REDIS_URL || 'redis://localhost:6379',
   redisPrefix: 'rl:', // Redis key prefix for rate limiter
   redisTimeout: 5000, // Redis connection timeout in ms
 };

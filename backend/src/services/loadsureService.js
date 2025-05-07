@@ -17,7 +17,7 @@ const activeConsumers = {
 };
 
 // Initialize Redis client for distributed request tracking
-const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379', {
+const redis = new Redis(config.REDIS_URL || 'redis://redis:6379', {
   keyPrefix: 'loadsure:',
   maxRetriesPerRequest: 3,
   connectTimeout: 5000

@@ -19,7 +19,7 @@ class SupportDataService {
     this.baseUrl = baseUrl;
     
     // Initialize Redis client
-    this.redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379', {
+    this.redis = new Redis(config.REDIS_URL || 'redis://redis:6379', {
       keyPrefix: CACHE_KEY_PREFIX,
       maxRetriesPerRequest: 3,
       connectTimeout: 5000

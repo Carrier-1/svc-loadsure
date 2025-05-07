@@ -51,7 +51,7 @@ app.use((req, res, next) => {
 });
 
 // Create Redis client with configuration
-const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379', {
+const redis = new Redis(config.REDIS_URL || 'redis://redis:6379', {
   keyPrefix: 'api:',
   maxRetriesPerRequest: 3,
   connectTimeout: 5000,

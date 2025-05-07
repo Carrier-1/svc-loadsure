@@ -3,6 +3,7 @@ import schedule from 'node-schedule';
 import supportDataService from './supportDataService.js';
 import { sequelize } from '../../database/index.js';
 import Redis from 'ioredis';
+import config from '../config.js';
 
 /**
  * Service for scheduling periodic updates of Loadsure support data
@@ -15,7 +16,7 @@ class SupportDataRefreshService {
     this.isRunning = false;
     
     // Initialize Redis for distributed locking
-    this.redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379', {
+    this.redis = new Redis(config.REDIS_URL || 'redis://redis:6379', {
       keyPrefix: 'loadsure:refresh:',
       maxRetriesPerRequest: 3,
       connectTimeout: 5000,
