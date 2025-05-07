@@ -2,16 +2,38 @@
 // This service connects to RabbitMQ for message handling and uses an in-memory store for quotes and bookings.
 import 'dotenv/config';
 
+// Check for required environment variables
+const requiredEnvVars = ['LOADSURE_API_KEY', 'DB_USERNAME', 'DB_PASSWORD'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingEnvVars.length) {
+  console.error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  console.error('Please check your .env file or environment configuration.');
+}
+
 export default {
   PORT: process.env.PORT || 3000,
-  LOADSURE_API_KEY: process.env.LOADSURE_API_KEY || 'MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN',
+  LOADSURE_API_KEY: process.env.LOADSURE_API_KEY,
   LOADSURE_BASE_URL: process.env.LOADSURE_BASE_URL || 'https://portal.loadsure.net',
   REQUEST_TIMEOUT: 30000, // 30 seconds
-  RABBITMQ_URL: process.env.RABBITMQ_URL || 'amqp://localhost',
+  RABBITMQ_URL: process.env.RABBITMQ_URL,
   QUEUE_QUOTE_REQUESTED: 'quote-requested',
   QUEUE_QUOTE_RECEIVED: 'quote-received',
   QUEUE_BOOKING_REQUESTED: 'booking-requested',
   QUEUE_BOOKING_CONFIRMED: 'booking-confirmed',
+
+  // Database configuration
+  DB_DIALECT: process.env.DB_DIALECT || 'postgres',
+  DB_HOST: process.env.DB_HOST || 'postgres',
+  DB_PORT: parseInt(process.env.DB_PORT || '5432', 10),
+  DB_USERNAME: process.env.DB_USERNAME,
+  DB_PASSWORD: process.env.DB_PASSWORD,
+  DB_NAME: process.env.DB_NAME || 'loadsure',
+  DB_SSL: process.env.DB_SSL === 'true',
+  DB_SSL_REJECT_UNAUTHORIZED: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+
+  // Redis configuration
+  REDIS_URL: process.env.REDIS_URL || 'redis://redis:6379',
 
   // Loadsure API specific configurations
   LOADSURE_API_VERSION: 'v2', // API version

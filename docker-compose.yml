@@ -7,8 +7,8 @@ services:
       - "5672:5672"
       - "15672:15672"
     environment:
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -43,8 +43,8 @@ services:
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_USER=loadsure
-      - POSTGRES_PASSWORD=loadsurepass
+      - POSTGRES_USER=${DB_USERNAME}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
       # DB_NAME will be overridden in environment-specific files
       - POSTGRES_DB=${DB_NAME:-loadsure}
     volumes:
@@ -67,13 +67,13 @@ services:
         - node:18-alpine
     environment:
       - NODE_ENV=${NODE_ENV:-development}
-      - DB_DIALECT=postgres
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USERNAME=loadsure
-      - DB_PASSWORD=loadsurepass
+      - DB_DIALECT=${DB_DIALECT:-postgres}
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME:-loadsure}
-      - DB_SSL=false
+      - DB_SSL=${DB_SSL:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -97,18 +97,18 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3000
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-      - REDIS_URL=redis://redis:6379
-      - LOADSURE_API_KEY=MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN
-      - LOADSURE_BASE_URL=https://portal.loadsure.net
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - REDIS_URL={$REDIS_URL}
+      - LOADSURE_API_KEY=${LOADSURE_API_KEY}
+      - LOADSURE_BASE_URL=${LOADSURE_BASE_URL}
       - SUPPORT_DATA_REFRESH_SCHEDULE=0 0 * * *
       - NODE_OPTIONS=--experimental-vm-modules
-      - DB_SSL=false
-      - DB_DIALECT=postgres
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USERNAME=loadsure
-      - DB_PASSWORD=loadsurepass
+      - DB_SSL=${DB_SSL:-false}
+      - DB_DIALECT=${DB_DIALECT:-postgres}
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME:-loadsure}
       - RATE_LIMIT_WINDOW_MS=60000
       - RATE_LIMIT_MAX_REQUESTS=100
@@ -158,17 +158,17 @@ services:
       dockerfile: Dockerfile
     environment:
       - NODE_ENV=${NODE_ENV:-development}
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-      - REDIS_URL=redis://redis:6379
-      - LOADSURE_API_KEY=MiphvjLVlwfZHrfhGklLgHzvjxiTbzIunOCrIAizpjVFiiRSufowtNhGGCLAiSmN
-      - LOADSURE_BASE_URL=https://portal.loadsure.net
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - REDIS_URL={$REDIS_URL}
+      - LOADSURE_API_KEY=${LOADSURE_API_KEY}
+      - LOADSURE_BASE_URL=${LOADSURE_BASE_URL}}
       - NODE_OPTIONS=--experimental-vm-modules
-      - DB_SSL=false
-      - DB_DIALECT=postgres
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USERNAME=loadsure
-      - DB_PASSWORD=loadsurepass
+      - DB_SSL=${DB_SSL:-false}
+      - DB_DIALECT=${DB_DIALECT:-postgres}
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME:-loadsure}
       - WORKER_CONCURRENCY=3
       - WORKER_ID=${HOSTNAME}
@@ -199,8 +199,8 @@ services:
       dockerfile: Dockerfile
     environment:
       - NODE_ENV=${NODE_ENV:-development}
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - REDIS_URL={$REDIS_URL}
       - DOCKER_SCALE=true
       - MIN_WORKERS=1
       - MAX_WORKERS=5

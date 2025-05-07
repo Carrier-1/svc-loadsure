@@ -9,8 +9,8 @@ const baseConfig = {
   dialect: process.env.DB_DIALECT || 'postgres',
   host: process.env.DB_HOST || 'postgres',
   port: parseInt(process.env.DB_PORT || '5432', 10),
-  username: process.env.DB_USERNAME || 'loadsure',
-  password: process.env.DB_PASSWORD || 'loadsurepass',
+  username: process.env.DB_USERNAME,
+  password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME || 'loadsure',
   // Use sequelize_migrations table instead of SequelizeMeta
   migrationStorageTableName: 'sequelize_migrations',
