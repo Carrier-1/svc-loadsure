@@ -23,7 +23,6 @@ const router = express.Router();
 
 // Redis and RabbitMQ dependencies - will be injected during initialization
 let redis;
-let receiveEmitter;
 let channel;
 
 /**
@@ -117,7 +116,6 @@ router.get('/quotes/list', async (req, res) => {
     });
   }
 });
-
 
 /**
  * @swagger
@@ -1255,6 +1253,233 @@ router.get('/certificates/:number', async (req, res) => {
 
 /**
  * @swagger
+ * /insurance/certificates/{number}/cancel:
+ *   post:
+ *     summary: Cancel a certificate
+ *     description: Cancels an insurance certificate with Loadsure using asynchronous processing
+ *     tags: [Certificates]
+ *     parameters:
+ *       - in: path
+ *         name: number
+ *         required: true
+ *         description: Certificate number to cancel
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 description: User ID for authentication with Loadsure
+ *               reason:
+ *                 type: string
+ *                 description: Reason for cancellation
+ *     responses:
+ *       200:
+ *         description: Certificate cancelled successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [success]
+ *                 certificate:
+ *                   type: object
+ *                   properties:
+ *                     certificateNumber:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                       enum: [CANCELLED]
+ *                     cancellationDate:
+ *                       type: string
+ *                       format: date-time
+ *                     cancellationReason:
+ *                       type: string
+ *       400:
+ *         description: Bad request, missing required fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Certificate not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       408:
+ *         description: Request timeout
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post('/certificates/:number/cancel', async (req, res) => {
+  const certificateNumber = req.params.number;
+  const { userId, reason, additionalInfo, emailAssured } = req.body;
+  const requestId = uuidv4();
+  const instanceId = process.env.HOSTNAME || 'unknown-instance';
+  
+  // Validate required fields
+  if (!userId) {
+    return res.status(400).json({
+      status: 'error',
+      error: 'Missing required field: userId',
+      requestId
+    });
+  }
+  
+  try {
+    // Check if certificate exists in database
+    try {
+      await DatabaseService.getCertificate(certificateNumber);
+    } catch (dbError) {
+      return res.status(404).json({
+        status: 'error',
+        error: 'Certificate not found',
+        message: dbError.message,
+        requestId
+      });
+    }
+    
+    // Store request info in Redis (key will automatically expire after 120 seconds)
+    console.log(`Storing cancellation request ${requestId} in Redis with 120s expiry`);
+    await redis.set(`pending:${requestId}`, JSON.stringify({ 
+      timestamp: Date.now(),
+      instanceId,
+      type: 'certificate-cancellation',
+      certificateNumber
+    }), 'EX', 120);
+    
+    // Publish event to RabbitMQ
+    const message = {
+      requestId,
+      instanceId,
+      certificateNumber,
+      userId,
+      additionalInfo,
+      emailAssured,
+      reason: reason || 'Client Request',
+      timestamp: new Date().toISOString()
+    };
+    
+    try {
+      channel.sendToQueue(
+        'certificate-cancellation-requested',
+        Buffer.from(JSON.stringify(message)),
+        { persistent: true }
+      );
+      
+      console.log(`Certificate cancellation request ${requestId} sent to queue`);
+    } catch (queueError) {
+      console.error(`Error sending message to queue: ${queueError.message}`);
+      
+      // Clean up Redis
+      await redis.del(`pending:${requestId}`);
+      
+      return res.status(500).json({
+        status: 'error',
+        error: 'Error sending cancellation request to processing queue',
+        requestId
+      });
+    }
+    
+    // Set up polling to check for response
+    let attempts = 0;
+    const maxAttempts = 60; // 60 attempts × 1 second = 60 seconds max wait time
+    const pollInterval = 1000; // 1 second between checks
+    
+    const checkForResponse = async () => {
+      attempts++;
+      
+      // Check if there's a response in Redis
+      const responseJson = await redis.get(`response:${requestId}`);
+      
+      if (responseJson) {
+        // We found a response
+        const response = JSON.parse(responseJson);
+        
+        // Clean up Redis keys
+        await redis.del(`pending:${requestId}`);
+        await redis.del(`response:${requestId}`);
+        
+        // Check if it's an error response
+        if (response.error) {
+          return res.status(400).json({
+            status: 'error',
+            error: response.error,
+            requestId
+          });
+        }
+        
+        // It's a successful response
+        const data = response.data;
+        
+        // Send response back to client
+        console.log(`Sending cancellation response for request ${requestId} to client (found in Redis)`);
+        return res.json({
+          status: 'success',
+          certificate: {
+            certificateNumber: data.certificateNumber,
+            status: data.status,
+            cancellationReason: data.cancellationReason,
+            cancellationAdditionalInfo: data.cancellationAdditionalInfo,
+            canceledBy: data.canceledBy,
+            canceledDate: data.canceledDate
+          }
+        });
+      }
+      
+      // Check if we've exceeded the maximum number of attempts
+      if (attempts >= maxAttempts) {
+        // We've waited long enough, send a timeout response
+        console.log(`Request ${requestId} timed out after ${maxAttempts} attempts`);
+        
+        // Clean up Redis key
+        await redis.del(`pending:${requestId}`);
+        
+        return res.status(408).json({
+          status: 'error',
+          error: 'Request timeout. Your cancellation request is still being processed, but the response did not arrive in time.',
+          requestId
+        });
+      }
+      
+      // Continue polling
+      setTimeout(checkForResponse, pollInterval);
+    };
+    
+    // Start polling
+    setTimeout(checkForResponse, pollInterval);
+  } catch (error) {
+    console.error(`Error processing certificate cancellation request for ${certificateNumber}:`, error);
+    
+    res.status(500).json({
+      status: 'error',
+      error: 'Failed to process certificate cancellation request',
+      message: error.message,
+      requestId
+    });
+  }
+});
+
+/**
+ * @swagger
  * /insurance/bookings/list:
  *   get:
  *     summary: Get a list of all bookings
@@ -1334,7 +1559,6 @@ router.get('/bookings/list', async (req, res) => {
     });
   }
 });
-
 
 /**
  * @swagger

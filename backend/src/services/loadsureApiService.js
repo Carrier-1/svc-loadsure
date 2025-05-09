@@ -703,6 +703,67 @@ class LoadsureApiService {
       throw error;
     }
   }
+
+  /**
+   * Cancel a certificate with Loadsure API
+   * @param {String} certificateNumber - Certificate number to cancel
+   * @param {String} userId - User ID for authentication
+   * @param {String} reason - Reason for cancellation (optional)
+   * @returns {Promise<Object>} Cancellation confirmation
+   */
+  async cancelCertificate(certificateNumber, userId, reason = 'CANNLN', cancellationAdditionaInfo = '', emailAssured=true) {
+    console.log(`Cancelling certificate ${certificateNumber} with Loadsure API`);
+    
+    // Make sure fetch is initialized
+    if (!fetch) {
+      await initializeFetch();
+      if (!fetch) {
+        throw new Error('Fetch is not initialized in LoadsureApiService');
+      }
+    }
+    
+    try {
+      const payload = {
+        userId: userId,
+        certificateNumber: certificateNumber,
+        cancellationReason: reason,
+        cancellationAdditionaInfo: cancellationAdditionaInfo,
+        emailAssured: emailAssured
+      };
+
+      console.log(`Cancelling certificate ${certificateNumber} with the following payload:`, JSON.stringify(payload, null, 2));
+
+      const response = await fetch(`${this.baseUrl}/api/insureLoad/cancelCertificate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Loadsure API error: ${response.success} - ${JSON.stringify(errorData)}`);
+      }
+
+      const data = await response.json();
+
+      
+      // Format the response to match our internal format
+      return {
+        certificateNumber: data.certificateNumber,
+        status: data.status,
+        cancellationReason: data.cancellationReason,
+        cancellationAdditionaInfo: data.cancellationAdditionaInfo || '',
+        canceledBy: data.canceledBy,
+        cancelDate: data.canceledDate,
+      };
+    } catch (error) {
+      console.error('Error cancelling certificate with Loadsure API:', error);
+      throw error;
+    }
+  }
 }
 
 // Initialize fetch at module level

@@ -21,6 +21,8 @@ export default {
   QUEUE_QUOTE_RECEIVED: 'quote-received',
   QUEUE_BOOKING_REQUESTED: 'booking-requested',
   QUEUE_BOOKING_CONFIRMED: 'booking-confirmed',
+  QUEUE_CERTIFICATE_CANCELLATION_REQUESTED: 'certificate-cancellation-requested',
+  QUEUE_CERTIFICATE_CANCELLATION_CONFIRMED: 'certificate-cancellation-confirmed',
 
   // Database configuration
   DB_DIALECT: process.env.DB_DIALECT || 'postgres',

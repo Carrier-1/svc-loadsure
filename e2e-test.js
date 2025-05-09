@@ -25,6 +25,25 @@ function generateTestId() {
 }
 
 /**
+ * Generate a random cancellation reason
+ * @returns {string} Random cancellation reason
+ */
+function generateRandomCancellationReason() {
+  const reasons = [
+    "CANASD",
+    "CANNLN",
+    "CANPIE",
+    "CANCHP",
+    "CANVAL",
+    "CANREQ",
+    "CANCOP",
+    "CANREP",
+    "CANOTH"
+  ];
+  return reasons[Math.floor(Math.random() * reasons.length)];
+}
+
+/**
  * Create a test payload with unique values including all fields the UI accepts
  * @param {string} testId - Test ID for tracking
  * @returns {Object} Test payload
@@ -397,6 +416,44 @@ async function testGetCertificate(policyNumber, userData) {
 }
 
 /**
+ * Test Cancel a certificate
+ * @param {string} certificateNumber - Certificate number
+ * @returns {Promise<Object>} Cancellation request data
+ */
+async function cancelCertificate(certificateNumber, userData, reason, emailAssured = false) {
+  console.log(`Initiating cancellation for certificate ${certificateNumber}...`);
+  
+  const response = await fetch(`${API_BASE_URL}/insurance/certificates/${certificateNumber}/cancel`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      userId: 'user@example.com',
+      reason: reason,
+      additionalInfo: reason ==='CANOTH' ? 'I have my reasons': '',
+      emailAssured: emailAssured
+    })
+  });
+  
+  const result = await response.json();
+  
+  if (!response.ok) {
+    console.error(`❌ Failed to cancel certificate: ${JSON.stringify(result)}`);
+    throw new Error(`Failed to cancel certificate: ${JSON.stringify(result)}`);
+  }
+
+  console.log(`✅ Certificate cancelled successfully: ${result.certificate.certificateNumber}`);
+  console.log(`   Status: ${result.certificate.status}`);
+  console.log(`   Cancellation Date: ${result.certificate.canceledDate}`);
+  console.log(`   Reason: ${result.certificate.cancellationReason}`);
+  console.log(`   Cancellation Additional Info: ${result.certificate.cancellationAdditionaInfo || 'N/A'}`);
+  console.log('   Cancelled By: ', result.certificate.canceledBy);
+
+  return result.certificate;
+}
+
+/**
  * Run the complete test suite once
  * @param {number} testRunNumber - Test run number for logging
  * @returns {Promise<boolean>} Success status
@@ -406,9 +463,10 @@ async function runCompleteSuite(testRunNumber) {
   console.log(`Starting test run #${testRunNumber}`);
   console.log(`========================================\n`);
   
-  // Generate a unique test ID for this run
+  // Generate a unique test ID and reason for this run
   const testId = generateTestId();
   console.log(`Test ID: ${testId}`);
+  const cancellationReason = generateRandomCancellationReason();
   
   // Test support data first
   const supportDataSuccess = await testSupportData();
@@ -461,6 +519,15 @@ async function runCompleteSuite(testRunNumber) {
   );
   if (!certificateRetrievalSuccess) {
     console.error(`❌ Certificate retrieval test failed - test run ${testRunNumber} partially failed`);
+    return false;
+  }
+
+  await sleep(2000);
+
+  // Test cancellation of the certificate
+  const cancellationResult = await cancelCertificate(booking.policyNumber, payload.user, cancellationReason, true);
+  if (!cancellationResult) {
+    console.error(`❌ Certificate cancellation test failed - test run ${testRunNumber} partially failed`);
     return false;
   }
   

@@ -112,7 +112,6 @@ class DatabaseService {
     }
   }
 
-
   /**
    * Get a quote by its ID
    * @param {String} quoteId - Quote ID from Loadsure API
@@ -361,6 +360,68 @@ class DatabaseService {
       };
     } catch (error) {
       console.error('Error getting database statistics:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel a certificate in the database
+   * @param {String} certificateNumber - Certificate number
+   * @param {Object} cancellationData - Cancellation details
+   * @returns {Promise<Object>} Updated certificate
+   */
+  static async cancelCertificate(certificateNumber, cancellationData) {
+    try {
+      console.log(`Cancelling certificate ${certificateNumber} in database`);
+      
+      // Get the certificate
+      const certificate = await Certificate.findOne({ where: { certificateNumber } });
+      
+      if (!certificate) {
+        throw new Error(`Certificate with number ${certificateNumber} not found`);
+      }
+      
+      // Update certificate status and add cancellation metadata
+      await certificate.update({
+        status: 'CANCELLED',
+        metadata: {
+          ...(certificate.metadata || {}),
+          cancellation: {
+            date: cancellationData.cancellationDate || new Date().toISOString(),
+            reason: cancellationData.cancellationReason || 'Client Request',
+            confirmation: cancellationData.cancellationConfirmation,
+            cancelledBy: cancellationData.cancelledBy
+          }
+        },
+        responseData: {
+          ...(certificate.responseData || {}),
+          cancellation: cancellationData
+        }
+      });
+      
+      // Check if we need to update a related booking
+      if (certificate.bookingId) {
+        const booking = await Booking.findOne({ where: { bookingId: certificate.bookingId } });
+        if (booking) {
+          await booking.update({
+            status: 'cancelled',
+            metadata: {
+              ...(booking.metadata || {}),
+              cancellation: {
+                date: cancellationData.cancellationDate || new Date().toISOString(),
+                reason: cancellationData.cancellationReason || 'Client Request'
+              }
+            }
+          });
+          console.log(`Updated related booking ${booking.bookingId} status to cancelled`);
+        }
+      }
+      
+      // Reload the certificate to get the updated data
+      await certificate.reload();
+      return certificate;
+    } catch (error) {
+      console.error(`Error cancelling certificate ${certificateNumber}:`, error);
       throw error;
     }
   }

@@ -93,6 +93,8 @@ async function setupRabbitMQ() {
     await channel.assertQueue(config.QUEUE_QUOTE_RECEIVED, { durable: true });
     await channel.assertQueue(config.QUEUE_BOOKING_REQUESTED, { durable: true });
     await channel.assertQueue(config.QUEUE_BOOKING_CONFIRMED, { durable: true });
+    await channel.assertQueue(config.QUEUE_CERTIFICATE_CANCELLATION_REQUESTED, { durable: true });
+    await channel.assertQueue(config.QUEUE_CERTIFICATE_CANCELLATION_CONFIRMED, { durable: true });
     
     console.log('RabbitMQ connection established');
     
@@ -246,6 +248,66 @@ async function setupConsumers() {
         channel.ack(msg);
       } catch (error) {
         console.error('Error processing booking confirmed message:', error);
+        console.error(`Message content: ${msg.content.toString()}`);
+        // Negative acknowledge and requeue the message
+        channel.nack(msg, false, true);
+      }
+    }
+  });
+
+  // Consumer for certificate cancellation confirmation
+  await channel.consume(config.QUEUE_CERTIFICATE_CANCELLATION_CONFIRMED, async (msg) => {
+    console.log("Received message in certificate-cancellation-confirmed queue");
+    if (msg !== null) {
+      try {
+        const data = JSON.parse(msg.content.toString());
+        const { requestId } = data;
+        
+        console.log(`Looking for cancellation request ID: ${requestId}`);
+        
+        // Check if this is a pending request
+        const pendingExists = await redis.exists(`pending:${requestId}`);
+        console.log(`Checking for request ID: ${requestId} in Redis, exists: ${pendingExists}`);
+        
+        // Check if response indicates an error
+        if (data.error) {
+          console.error(`Error in cancellation response for request ${requestId}:`, data.error);
+          
+          if (pendingExists) {
+            // Store the error response in Redis
+            await redis.set(`response:${requestId}`, JSON.stringify({ 
+              error: data.error,
+              timestamp: Date.now()
+            }), 'EX', 300); // Keep response for 5 minutes
+            
+            console.log(`Stored error response in Redis for request ${requestId}`);
+          } else {
+            console.warn(`No pending request found for error response: ${requestId}`);
+          }
+          
+          channel.ack(msg);
+          return;
+        }
+        
+        console.log(`Certificate cancellation confirmed for request ${requestId}, certificate: ${data.certificateNumber}`);
+        
+        // Store the response in Redis
+        if (pendingExists) {
+          console.log(`Storing cancellation response in Redis for request ${requestId}`);
+          
+          // Store full response data
+          await redis.set(`response:${requestId}`, JSON.stringify({
+            data: data,
+            timestamp: Date.now()
+          }), 'EX', 300); // Keep response for 5 minutes
+        } else {
+          console.warn(`No pending request found for requestId: ${requestId}`);
+        }
+        
+        // Acknowledge the message
+        channel.ack(msg);
+      } catch (error) {
+        console.error('Error processing certificate cancellation confirmed message:', error);
         console.error(`Message content: ${msg.content.toString()}`);
         // Negative acknowledge and requeue the message
         channel.nack(msg, false, true);

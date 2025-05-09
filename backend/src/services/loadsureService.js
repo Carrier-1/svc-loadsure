@@ -66,6 +66,8 @@ async function startService() {
     await channel.assertQueue(config.QUEUE_QUOTE_RECEIVED, { durable: true });
     await channel.assertQueue(config.QUEUE_BOOKING_REQUESTED, { durable: true });
     await channel.assertQueue(config.QUEUE_BOOKING_CONFIRMED, { durable: true });
+    await channel.assertQueue(config.QUEUE_CERTIFICATE_CANCELLATION_REQUESTED, { durable: true });
+    await channel.assertQueue(config.QUEUE_CERTIFICATE_CANCELLATION_CONFIRMED, { durable: true });
     
     console.log(`Loadsure Service [${WORKER_ID}]: RabbitMQ connection established`);
     
@@ -321,10 +323,122 @@ async function setupConsumers(channel, loadsureApi) {
       }
     }
   }, { noAck: false });
+
+  // Process certificate cancellation requests with Redis-based distributed request tracking
+  const cancellationConsumer = await channel.consume(config.QUEUE_CERTIFICATE_CANCELLATION_REQUESTED, async (msg) => {
+    if (msg !== null) {
+      activeJobs++;
+      const startTime = Date.now();
+      let requestId = 'unknown';
+      
+      try {
+        const data = JSON.parse(msg.content.toString());
+        requestId = data.requestId;
+        const certificateNumber = data.certificateNumber;
+        const userId = data.userId;
+        const reason = data.reason || 'Client Request';
+        const additionalInfo = data.additionalInfo || '';
+        const emailAssured = data.emailAssured || '';
+        
+        console.log(`Processing certificate cancellation request: ${requestId}, Certificate: ${certificateNumber}`);
+        
+        // Check if this request is already being processed by another instance
+        const processingKey = `pending:${requestId}`;
+        const isBeingProcessed = await redis.exists(processingKey);
+        
+        if (isBeingProcessed) {
+          console.log(`Cancellation request ${requestId} is already being processed by another instance - skipping`);
+          // Acknowledge the message to remove from queue
+          channel.ack(msg);
+          activeJobs--;
+          return;
+        }
+        
+        // Mark this request as being processed
+        const instanceInfo = JSON.stringify({
+          instanceId: WORKER_ID,
+          timestamp: Date.now()
+        });
+        await redis.set(processingKey, instanceInfo, 'EX', 60);
+        
+        // Cancel certificate with Loadsure API
+        const cancellationResult = await loadsureApi.cancelCertificate(
+          certificateNumber, 
+          userId, 
+          reason,
+          additionalInfo,
+          emailAssured
+        );
+        
+        // Add request ID to the result
+        cancellationResult.requestId = requestId;
+        
+        // Update certificate in database
+        await DatabaseService.cancelCertificate(certificateNumber, cancellationResult);
+        
+        // Publish cancellation confirmed event
+        await channel.sendToQueue(
+          config.QUEUE_CERTIFICATE_CANCELLATION_CONFIRMED,
+          Buffer.from(JSON.stringify(cancellationResult)),
+          { persistent: true }
+        );
+        
+        const processingTime = Date.now() - startTime;
+        console.log(`Certificate cancellation confirmed for request: ${requestId} (took ${processingTime}ms)`);
+        
+        // Only acknowledge the message AFTER saving to database and publishing event
+        channel.ack(msg);
+        
+        // Clean up the Redis key
+        await redis.del(processingKey);
+      } catch (error) {
+        console.error(`Error processing certificate cancellation request ${requestId}:`, error);
+        
+        try {
+          // Remove the pending request from Redis
+          await redis.del(`pending:${requestId}`);
+          
+          // If this is a temporary error, negative acknowledge with requeue
+          const isTemporaryError = error.message.includes('ECONNREFUSED') || 
+                                  error.message.includes('timeout') ||
+                                  error.message.includes('500');
+          
+          // If we have a request ID and it's not a temporary error, send an error response
+          if (requestId !== 'unknown' && !isTemporaryError) {
+            const errorResponse = {
+              requestId: requestId,
+              error: error.message,
+              status: 'failed'
+            };
+            
+            // Send error response back to the API
+            channel.sendToQueue(
+              config.QUEUE_CERTIFICATE_CANCELLATION_CONFIRMED,
+              Buffer.from(JSON.stringify(errorResponse)),
+              { persistent: true }
+            );
+            
+            console.log(`Sent error response for cancellation request: ${requestId}`);
+          }
+          
+          channel.nack(msg, false, isTemporaryError);
+        } catch (innerError) {
+          console.error('Error during error handling:', innerError);
+          channel.nack(msg, false, false); // Don't requeue on error handling failure
+        }
+      } finally {
+        activeJobs--;
+        const processingTime = Date.now() - startTime;
+        console.log(`Certificate cancellation request ${requestId} processed in ${processingTime}ms, active jobs: ${activeJobs}`);
+      }
+    }
+  }, { noAck: false });
+
   
   // Store consumer tags for graceful shutdown
   activeConsumers.quotes = quoteConsumer;
   activeConsumers.bookings = bookingConsumer;
+  activeConsumers.cancellations = cancellationConsumer;
   
   // Start scheduled tasks
   startScheduledTasks();
