@@ -1,5 +1,5 @@
-// backend/jest.config.js
-export default {
+// backend/jest.config.cjs
+module.exports = {
   transform: {
     '^.+\\.(js|jsx)$': 'babel-jest',
   },
@@ -13,11 +13,9 @@ export default {
   // Add setup file to run before tests
   setupFilesAfterEnv: ['./jest.setup.js'],
   
-  // Fix module resolution for ES modules
-  moduleNameMapper: {
-    "/^(\.{1,2}\/.*)\.js$/": "$1"   
-  },
-  
+  // Mocks need to be hoisted to the top to ensure they're used
+  injectGlobals: true,
+
   // Handle ESM dependencies
   transformIgnorePatterns: [
     '/node_modules/(?!node-fetch|fetch-blob|data-uri-to-buffer|formdata-polyfill)'
@@ -26,9 +24,18 @@ export default {
   // Increase timeout for tests
   testTimeout: 10000,
 
-  // Set module directories to help with path resolution
-  moduleDirectories: ['node_modules', 'src'],
-  
-  // Root directories for module resolution
-  roots: ['<rootDir>/src']
-}
+  // Use CommonJS for tests (easier with Jest) even though our app is ESM
+  transform: {
+    '^.+\\.js$': [
+      'babel-jest',
+      {
+        targets: {
+          node: 'current'
+        },
+        plugins: [
+          '@babel/plugin-transform-modules-commonjs'
+        ]
+      }
+    ]
+  }
+};

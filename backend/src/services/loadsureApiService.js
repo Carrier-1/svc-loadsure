@@ -590,32 +590,45 @@ class LoadsureApiService {
       }
     };
     
-    // Use provided user/assured info or defaults
-    const userData = user || defaultUser;
-    const assuredData = assured || defaultAssured;
-    
     // Resolve default load type
     const defaultLoadType = await this.resolveDefaultLoadType();
 
-    // Construct the payload according to Loadsure API structure
-    return {
-      // Required user and assured info
-      user: {
-        id: userData.id || defaultUser.id,
-        email: userData.email || defaultUser.email,
-        name: userData.name || defaultUser.name
-      },
-      assured: {
-        name: assuredData.name || defaultAssured.name,
-        email: assuredData.email || defaultAssured.email,
-        address: assuredData.address || {
+    let userObject;
+    let assuredObject;
+
+    if (user) {
+      // Use the user object directly from the freightDetails
+      userObject = {
+        id: user.id || defaultUser.id,
+        email: user.email || defaultUser.email,
+        name: user.name || defaultUser.name
+      };
+    } else {
+      userObject = defaultUser;
+    }
+
+    if (assured) {
+      // Use the assured object directly from the freightDetails
+      assuredObject = {
+        name: assured.name || defaultAssured.name,
+        email: assured.email || defaultAssured.email,
+        address: assured.address || {
           address1: "123 Business St",
           city: originParts[0] || "Unknown",
           state: originParts[1] || "Unknown",
           country: "USA",
           postal: "12345"
         }
-      },
+      };
+    } else {
+      assuredObject = defaultAssured;
+    }
+
+    // Construct the payload according to Loadsure API structure
+    return {
+      // Required user and assured info
+      user: userObject,
+      assured: assuredObject,
       // Shipment details
       shipment: {
         version: "2",

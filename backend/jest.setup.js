@@ -9,16 +9,21 @@ process.env.LOADSURE_BASE_URL = 'https://test-api.com';
 // Add global jest timeout
 jest.setTimeout(10000);
 
-// Mock console methods to reduce noise during tests
+// Provide global mock for node modules that are imported
+global.jest = jest;
+
+// Mock console methods to reduce noise during tests but keep errors for debugging
+const originalConsole = { ...console };
 global.console = {
   ...console,
   log: jest.fn(),
   info: jest.fn(),
   warn: jest.fn(),
-  error: console.error // Keep error for debugging
+  error: originalConsole.error // Keep error for debugging
 };
 
 // Clean up after all tests
 afterAll(() => {
-  jest.clearAllMocks();
+  // Restore console
+  global.console = originalConsole;
 });

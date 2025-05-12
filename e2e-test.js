@@ -236,7 +236,7 @@ async function testCreateQuote(testId, providedPayload = null) {
     console.log(`  # of Stops: ${payload.stops.length}`);
     
     // Determine endpoint - use complete API instead of simple for complex payload
-    const endpoint = payload.stops && payload.stops.length > 2 ? 
+    const endpoint = payload.stops && payload.stops.length > 1 ? 
       `${API_BASE_URL}/insurance/quotes` :
       `${API_BASE_URL}/insurance/quotes/simple`;
     
@@ -429,7 +429,7 @@ async function cancelCertificate(certificateNumber, userData, reason, emailAssur
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      userId: 'user@example.com',
+      userId: userData.id,
       reason: reason,
       additionalInfo: reason ==='CANOTH' ? 'I have my reasons': '',
       emailAssured: emailAssured
