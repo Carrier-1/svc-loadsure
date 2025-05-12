@@ -9,7 +9,7 @@
     "service": "node src/services/loadsureService.js",
     "monitor": "node src/services/queueMonitorStarter.js",
     "setup-tests": "node setupTestMocks.js",
-    "test": "node setupTestMocks.cjs && jest --config=jest.config.js",
+    "test": "node setupTestMocks.cjs && jest --config=jest.config.cjs",
     "test:watch": "node setupTestMocks.cjs && jest --watch",
     "test:coverage": "node setupTestMocks.cjs && jest --coverage",
     "test:unit": "node setupTestMocks.cjs && jest src/__tests__/unit",

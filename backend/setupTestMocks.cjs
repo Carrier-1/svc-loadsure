@@ -26,6 +26,10 @@ createDirIfNotExists(mockBaseDir);
 const databaseMockDir = path.join(__dirname, 'src', '__tests__', 'mocks', 'database');
 createDirIfNotExists(databaseMockDir);
 
+// Bas directory for services unit tests
+const unitBaseDir = path.join(__dirname, 'src', '__tests__', 'unit', 'services');
+createDirIfNotExists(unitBaseDir);
+
 const databaseIndexMock = `
 // Mock database/index.js
 const sequelize = {
