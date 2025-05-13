@@ -7,16 +7,12 @@ const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'Loadsure Insurance Integration API',
+      title: 'Carrier1 Loadsure Insurance Integration API',
       version: '1.0.0',
-      description: 'API documentation for the Loadsure Insurance Integration Microservice',
+      description: 'API documentation for the Carrier1 Loadsure Insurance Integration Microservice',
       contact: {
         name: 'API Support',
-        email: 'support@example.com'
-      },
-      license: {
-        name: 'MIT',
-        url: 'https://opensource.org/licenses/MIT'
+        email: 'support@carrier1.com'
       }
     },
     servers: [
