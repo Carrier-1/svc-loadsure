@@ -4,17 +4,19 @@
 
 set -e  # Exit on error
 
-# Configuration
-API_URL=${API_URL:-"http://localhost:3000/api"}
+# Configuration - read API_PORT from environment or use default
+API_PORT=${API_PORT:-3001}
+API_URL=${API_URL:-"http://localhost:${API_PORT}/api"}
 MAX_RETRIES=30
 RETRY_INTERVAL=5
-HEALTH_ENDPOINT="http://localhost:3000/health"
+HEALTH_ENDPOINT="http://localhost:${API_PORT}/health"
 
 # Print banner
 echo "================================================"
 echo "Loadsure Insurance Integration E2E Test Runner"
 echo "================================================"
 echo "API URL: $API_URL"
+echo "Health endpoint: $HEALTH_ENDPOINT"
 echo
 
 # Ensure we have the necessary dependencies

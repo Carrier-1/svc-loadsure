@@ -4,6 +4,8 @@
 # Default environment variables
 ENV ?= dev
 NODE_ENV ?= development
+API_PORT ?= 3001
+FRONTEND_PORT ?= 8081
 
 # Set compose files based on environment
 ifeq ($(ENV),dev)
@@ -24,6 +26,8 @@ PROJECT_NAME := loadsure-insurance
 # Export environment variables
 export NODE_ENV
 export DB_NAME
+export API_PORT
+export FRONTEND_PORT
 
 # Default target
 .PHONY: help
@@ -40,6 +44,10 @@ help:
 	@echo "  make dev             # Start development environment"
 	@echo "  make prod            # Start production environment"
 	@echo "  make rebuild-changed # Rebuild and restart only services with changed files"
+	@echo ""
+	@echo "Port Configuration:"
+	@echo "  make up API_PORT=3001 FRONTEND_PORT=8081  # Start with custom ports"
+	@echo "  make ports                               # Display current port mappings"
 	@echo ""
 	@echo "Container Management:"
 	@echo "  make build           # Build all containers"
@@ -65,6 +73,7 @@ help:
 	@echo "  make prune           # Remove unused Docker resources"
 	@echo ""
 	@echo "Current Environment: $(ENV) (DB: $(DB_NAME), NODE_ENV: $(NODE_ENV))"
+	@echo "Current Ports: API=http://localhost:$(API_PORT), Frontend=http://localhost:$(FRONTEND_PORT)"
 
 # Environment shortcuts
 .PHONY: dev prod
@@ -81,6 +90,10 @@ prod:
 up:
 	@echo "Starting services with $(COMPOSE_FILES)..."
 	docker-compose $(COMPOSE_FILES) up -d
+	@echo "Services started successfully!"
+	@echo "API: http://localhost:$(API_PORT)/api"
+	@echo "Swagger: http://localhost:$(API_PORT)/api-docs"
+	@echo "Frontend: http://localhost:$(FRONTEND_PORT)"
 
 down:
 	@echo "Stopping services..."
@@ -107,10 +120,13 @@ pull:
 frontend:
 	@echo "Starting frontend service..."
 	docker-compose $(COMPOSE_FILES) up -d --build frontend
+	@echo "Frontend started at http://localhost:$(FRONTEND_PORT)"
 
 backend:
 	@echo "Starting backend services..."
-	docker-compose $(COMPOSE_FILES) up -d --build api-service loadsure-service
+	docker-compose $(COMPOSE_FILES) up -d --build api-service loadsure-service nginx
+	@echo "API started at http://localhost:$(API_PORT)/api"
+	@echo "Swagger started at http://localhost:$(API_PORT)/api-docs"
 
 db:
 	@echo "Starting database services..."
@@ -122,30 +138,6 @@ db:
 migrate:
 	@echo "Running database migrations..."
 	docker-compose $(COMPOSE_FILES) run --rm db-setup
-
-# Intelligent rebuild - detects which services need rebuilding based on changed files
-.PHONY: rebuild-changed
-rebuild-changed:
-	@echo "Checking for changed files..."
-	@if [ -n "$$(git diff --name-only HEAD | grep -E '^frontend/')" ]; then \
-		echo "Frontend changes detected. Rebuilding frontend..."; \
-		docker-compose $(COMPOSE_FILES) up -d --build frontend; \
-	fi
-	@if [ -n "$$(git diff --name-only HEAD | grep -E '^backend/')" ]; then \
-		echo "Backend changes detected. Rebuilding backend services..."; \
-		docker-compose $(COMPOSE_FILES) up -d --build --no-deps api-service loadsure-service; \
-	fi
-	@if [ -n "$$(git diff --name-only HEAD | grep -E '^backend/database/migrations/')" ]; then \
-		echo "Migration changes detected. Running migrations..."; \
-		docker-compose $(COMPOSE_FILES) run --rm db-setup npx sequelize-cli db:migrate; \
-	fi
-	@if [ -n "$$(git diff --name-only HEAD | grep -E 'docker-compose|Dockerfile|nginx')" ]; then \
-		echo "Docker configuration changes detected. Rebuilding all services..."; \
-		docker-compose $(COMPOSE_FILES) up -d --build; \
-	fi
-	@if [ -z "$$(git diff --name-only HEAD | grep -E '^frontend/|^backend/|docker-compose|Dockerfile|nginx')" ]; then \
-		echo "No relevant changes detected."; \
-	fi
 
 # Log commands
 .PHONY: logs logs-api logs-frontend
@@ -197,19 +189,40 @@ prune:
 	@echo "Removing unused Docker resources..."
 	docker system prune -f
 
+# Port status command
+.PHONY: ports
+ports:
+	@echo "Current port mappings:"
+	@echo "API/Swagger: http://localhost:$(API_PORT)"
+	@echo "Frontend: http://localhost:$(FRONTEND_PORT)"
+	@if [ "$(ENV)" = "dev" ]; then \
+		echo ""; \
+		echo "Development tools (when exposed):"; \
+		echo "PostgreSQL: localhost:$${DEV_DB_PORT:-5433}"; \
+		echo "RabbitMQ: amqp://localhost:$${DEV_RABBITMQ_PORT:-5673}"; \
+		echo "RabbitMQ Management UI: http://localhost:$${DEV_RABBITMQ_MGMT_PORT:-15673}"; \
+	fi
+	@echo ""
+	@echo "To change ports, use: make up API_PORT=xxxx FRONTEND_PORT=yyyy"
+
 # Test commands
-.PHONY: test-setup test e2e-test test-cleanup
+.PHONY: test-setup test e2e-test unit-test test-cleanup
 
 test-setup:
 	@echo "Setting up test environment..."
 	npm install node-fetch@2 uuid
 	chmod +x run-e2e-test.sh
 
+unit-test:
+	@echo "Running unit tests..."
+	@cd backend && npm test
+
 e2e-test: test-setup
 	@echo "Running E2E tests..."
+	@export API_URL=http://localhost:$(API_PORT)/api && \
 	./run-e2e-test.sh
 
-test: e2e-test
+test: test-setup unit-test e2e-test
 	@echo "All tests completed."
 
 test-cleanup:
@@ -219,4 +232,6 @@ test-cleanup:
 up-and-test:
 	@echo "Starting services and running tests..."
 	$(MAKE) up
-	$(MAKE) e2e-test
+	@echo "Waiting for services to start..."
+	@sleep 10
+	$(MAKE) test
