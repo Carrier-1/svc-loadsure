@@ -231,6 +231,7 @@ services:
       - ./backend:/usr/src/app
       - /usr/src/app/node_modules
       - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/local/bin/docker-compose:/usr/local/bin/docker-compose
     depends_on:
       rabbitmq:
         condition: service_healthy
