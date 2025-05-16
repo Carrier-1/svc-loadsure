@@ -298,13 +298,13 @@ npm run test:e2e
 - ```json
    {
       "user": {
-         "name": "Chris Horvat",
-         "email": "cy.horvat@gmail.com",
-         "id": "cy.horvat@gmail.com"
+         "name": "John Q Doe",
+         "email": "example@example.com",
+         "id": "example@example.com"
       },
       "assured": {
-         "name": "Chris Horvat",
-         "email": "cy.horvat@gmail.com",
+         "name": "John Q Doe",
+         "email": "example@example.com",
          "address": {
             "address1": "123 Fake St",
             "city": "Chicao",
