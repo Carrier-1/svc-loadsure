@@ -196,9 +196,9 @@ cp backend/.env.example backend/.env
 PORT=3000
 
 # RabbitMQ Configuration
-RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-RABBITMQ_USER=guest
-RABBITMQ_PASS=guest
+RABBITMQ_URL=amqp://username:password@rabbitmq:5672
+RABBITMQ_USER=your_rabitmq_user_here
+RABBITMQ_PASS=your_rabitmq_password_here
 
 # Loadsure API Configuration
 LOADSURE_API_KEY=your_loadsure_api_key_here
@@ -208,8 +208,8 @@ LOADSURE_BASE_URL=https://portal.loadsure.net/api
 DB_DIALECT=postgres
 DB_HOST=postgres
 DB_PORT=5432
-DB_USERNAME=loadsure
-DB_PASSWORD=loadsurepass
+DB_USERNAME=your_postgres_username_here
+DB_PASSWORD=your_postgres_password_here
 DB_NAME=loadsure_dev
 DB_SSL=false
 DB_SSL_REJECT_UNAUTHORIZED=true
