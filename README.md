@@ -294,6 +294,92 @@ npm run test:e2e
 - `GET /api/insurance/stats` - Get system statistics
 - `GET /api/insurance/search` - Search across quotes, bookings, and certificates
 
+#### Insurance API minimum required JSON
+- ```json
+   {
+      "user": {
+         "name": "Chris Horvat",
+         "email": "cy.horvat@gmail.com",
+         "id": "cy.horvat@gmail.com"
+      },
+      "assured": {
+         "name": "Chris Horvat",
+         "email": "cy.horvat@gmail.com",
+         "address": {
+            "address1": "123 Fake St",
+            "city": "Chicao",
+            "state": "IL",
+            "postal": "34567",
+            "country": "USA"
+         }
+      },
+      "shipment": {
+         "version": "2",
+         "freightId": "FR-599399",
+         "poNumber": "PO-963687",
+         "pickupDate": "2025-05-01",
+         "deliveryDate": "2025-05-08",
+         "cargo": {
+            "cargoValue": {
+               "currency": "USD",
+               "value": 10000
+            },
+            "commodity": [
+               2
+            ],
+            "fullDescriptionOfCargo": "Electronics",
+            "weight": {
+               "unit": "lbs",
+               "value": 500
+            },
+            "freightClass": [
+               {
+                  "id": "class50",
+                  "percentage": 100
+               }
+            ]
+         },
+         "carriers": [
+            {
+               "mode": "ROAD",
+               "name": "Swift",
+               "equipmentType": 2
+            }
+         ],
+         "stops": [
+            {
+               "stopType": "PICKUP",
+               "stopNumber": 1,
+               "date": "2025-05-01",
+               "address": {
+                  "address1": "123 Fake St",
+                  "city": "Chicao",
+                  "state": "IL",
+                  "postal": "34567",
+                  "country": "USA"
+               }
+            },
+            {
+               "stopType": "DELIVERY",
+               "stopNumber": 2,
+               "date": "2025-05-08",
+               "address": {
+                  "address1": "123 Fake St",
+                  "city": "Denver",
+                  "state": "CO",
+                  "postal": "76543",
+                  "country": "USA"
+               }
+            }
+         ],
+         "loadType": "FULL_TRUCKLOAD_1",
+         "equipmentType": 2,
+         "integrationFeeType": "fixed",
+         "integrationFeeValue": 15
+      }
+   }
+```
+
 ### Support Data API
 - `GET /api/support-data/commodities` - Get list of commodities
 - `GET /api/support-data/commodity-exclusions` - Get commodity exclusions
