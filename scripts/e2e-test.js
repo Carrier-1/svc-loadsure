@@ -524,6 +524,44 @@ async function testGetCertificate(policyNumber, userData) {
 }
 
 /**
+ * Test Cancel a certificate
+ * @param {string} certificateNumber - Certificate number
+ * @returns {Promise<Object>} Cancellation request data
+ */
+async function cancelCertificate(certificateNumber, userData, reason, emailAssured = false) {
+  console.log(`Initiating cancellation for certificate ${certificateNumber}...`);
+  
+  const response = await fetch(`${API_BASE_URL}/insurance/certificates/${certificateNumber}/cancel`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      userId: userData.id,
+      reason: reason,
+      additionalInfo: reason ==='CANOTH' ? 'I have my reasons': '',
+      emailAssured: emailAssured
+    })
+  });
+  
+  const result = await response.json();
+  
+  if (!response.ok) {
+    console.error(`❌ Failed to cancel certificate: ${JSON.stringify(result)}`);
+    throw new Error(`Failed to cancel certificate: ${JSON.stringify(result)}`);
+  }
+
+  console.log(`✅ Certificate cancelled successfully: ${result.certificate.certificateNumber}`);
+  console.log(`   Status: ${result.certificate.status}`);
+  console.log(`   Cancellation Date: ${result.certificate.canceledDate}`);
+  console.log(`   Reason: ${result.certificate.cancellationReason}`);
+  console.log(`   Cancellation Additional Info: ${result.certificate.cancellationAdditionaInfo || 'N/A'}`);
+  console.log('   Cancelled By: ', result.certificate.canceledBy);
+
+  return result.certificate;
+}
+
+/**
  * Run a complete test cycle including simple quotes
  * @param {number} testRunNumber - Test run number
  * @returns {Promise<boolean>} Success status
@@ -605,6 +643,15 @@ async function runFullTestCycle(testRunNumber) {
   );
   if (!certificateRetrievalSuccess) {
     console.error(`❌ Certificate retrieval test failed - test run ${testRunNumber} partially failed`);
+    return false;
+  }
+
+   await sleep(2000);
+
+  // Test cancellation of the certificate
+  const cancellationResult = await cancelCertificate(booking.policyNumber, payload.user, cancellationReason, true);
+  if (!cancellationResult) {
+    console.error(`❌ Certificate cancellation test failed - test run ${testRunNumber} partially failed`);
     return false;
   }
 
