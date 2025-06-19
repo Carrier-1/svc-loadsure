@@ -36,7 +36,7 @@ if ! command -v curl &> /dev/null; then
 fi
 
 # Ensure test script exists
-if [ ! -f "e2e-test.js" ]; then
+if [ ! -f "./scripts/e2e-test.js" ]; then
     echo "Error: e2e-test.js not found in current directory."
     echo "Please make sure the test file is in the current directory."
     exit 1
@@ -78,7 +78,7 @@ run_tests() {
     export API_URL
     
     # Run the test script
-    node e2e-test.js
+    node ./scripts/e2e-test.js
     
     # Capture exit code
     local result=$?

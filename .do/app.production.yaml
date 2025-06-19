@@ -1,0 +1,142 @@
+name: svc-loadsure-production
+region: nyc3
+
+services:
+  - name: api-service
+    source_dir: /backend
+    github:
+      repo: Carrier-1/svc-loadsure
+      branch: main
+      deploy_on_push: false  # Manual deployment for production
+    
+    run_command: npm start
+    environment_slug: node-js
+    instance_count: 2
+    instance_size_slug: basic-s
+    
+    http_port: 3000
+    
+    routes:
+      - path: /
+    
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 15
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: LOG_LEVEL
+        value: info
+      - key: API_RATE_LIMIT_MAX_REQUESTS
+        value: "100"
+      - key: API_RATE_LIMIT_WINDOW_MS
+        value: "60000"
+      - key: LOADSURE_BASE_URL
+        value: https://portal.loadsure.net
+      - key: SUPPORT_DATA_REFRESH_SCHEDULE
+        value: "0 0 * * *"  # Daily at midnight
+      
+      # Secrets
+      - key: LOADSURE_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: REDIS_URL
+        scope: RUN_TIME
+        type: SECRET
+
+  - name: loadsure-worker
+    source_dir: /backend
+    github:
+      repo: Carrier-1/svc-loadsure
+      branch: main
+      deploy_on_push: false
+    
+    run_command: node src/services/loadsureService.js
+    environment_slug: node-js
+    instance_count: 2
+    instance_size_slug: basic-s
+    
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: WORKER_CONCURRENCY
+        value: "3"
+      - key: WORKER_ID
+        value: production-worker
+      - key: LOG_LEVEL
+        value: info
+      
+      # Secrets
+      - key: LOADSURE_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: REDIS_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: RABBITMQ_URL
+        scope: RUN_TIME
+        type: SECRET
+
+  - name: queue-monitor
+    source_dir: /backend
+    github:
+      repo: Carrier-1/svc-loadsure
+      branch: main
+      deploy_on_push: false
+    
+    run_command: node src/services/queueMonitorStarter.js
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: MIN_WORKERS
+        value: "2"
+      - key: MAX_WORKERS
+        value: "5"
+      - key: SCALE_UP_THRESHOLD
+        value: "10"
+      - key: SCALE_DOWN_THRESHOLD
+        value: "2"
+      - key: CHECK_INTERVAL
+        value: "10000"  # 10 seconds
+      
+      # Secrets
+      - key: REDIS_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: RABBITMQ_URL
+        scope: RUN_TIME
+        type: SECRET
+
+databases:
+  - name: postgres-db
+    engine: PG
+    version: "15"
+    size: db-s-1vcpu-1gb
+    num_nodes: 1
+    
+  - name: redis-cache
+    engine: REDIS
+    version: "7"
+    size: db-s-1vcpu-1gb
+    num_nodes: 1
+
+domains:
+  - domain: carrier1-svc-loadsure-api.ondigitalocean.app
+    type: PRIMARY

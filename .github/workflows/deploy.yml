@@ -1,0 +1,178 @@
+name: Deploy to DigitalOcean App Platform
+
+on:
+  push:
+    branches:
+      - develop  # Auto-deploy staging
+  release:
+    types: [published]  # Deploy production on release
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+jobs:
+  determine-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      terraform_dir: ${{ steps.env.outputs.terraform_dir }}
+    steps:
+    - id: env
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.event_name }}" == "release" ]]; then
+          echo "environment=production" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          echo "environment=staging" >> $GITHUB_OUTPUT
+        else
+          echo "environment=staging" >> $GITHUB_OUTPUT
+        fi
+        echo "terraform_dir=terraform/environments/${{ steps.env.outputs.environment }}" >> $GITHUB_OUTPUT
+
+  deploy-infrastructure:
+    needs: determine-environment
+    runs-on: ubuntu-latest
+    environment: ${{ needs.determine-environment.outputs.environment }}
+    outputs:
+      app_id: ${{ steps.terraform-apply.outputs.app_id }}
+      app_url: ${{ steps.terraform-apply.outputs.app_url }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.0
+        terraform_wrapper: false
+    
+    - name: Configure DigitalOcean CLI
+      uses: digitalocean/action-doctl@v2
+      with:
+        token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+    
+    - name: Terraform Init
+      run: |
+        cd terraform
+        terraform init \
+          -backend-config="access_key=${{ secrets.SPACES_ACCESS_KEY }}" \
+          -backend-config="secret_key=${{ secrets.SPACES_SECRET_KEY }}"
+    
+    - name: Terraform Plan
+      run: |
+        cd terraform
+        terraform plan \
+          -var-file="environments/${{ needs.determine-environment.outputs.environment }}/terraform.tfvars" \
+          -var="do_token=${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}" \
+          -var="loadsure_api_key=${{ secrets.LOADSURE_API_KEY }}" \
+          -var="rabbitmq_url=${{ secrets.RABBITMQ_URL }}" \
+          -out=tfplan
+    
+    - name: Terraform Apply
+      id: terraform-apply
+      run: |
+        cd terraform
+        terraform apply -auto-approve tfplan
+        
+        # Output values
+        echo "app_id=$(terraform output -raw app_id)" >> $GITHUB_OUTPUT
+        echo "app_url=$(terraform output -raw app_live_url)" >> $GITHUB_OUTPUT
+
+  run-migrations:
+    needs: [determine-environment, deploy-infrastructure]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.determine-environment.outputs.environment }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure DigitalOcean CLI
+      uses: digitalocean/action-doctl@v2
+      with:
+        token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+    
+    - name: Wait for deployment
+      run: |
+        echo "Waiting for app deployment to complete..."
+        sleep 60  # Give the app time to deploy
+        
+        # Check app status
+        APP_ID="${{ needs.deploy-infrastructure.outputs.app_id }}"
+        for i in {1..10}; do
+          STATUS=$(doctl apps get $APP_ID --format Status --no-header)
+          echo "App status: $STATUS"
+          
+          if [[ "$STATUS" == "RUNNING" ]]; then
+            echo "App is running!"
+            break
+          elif [[ "$STATUS" == "ERROR" ]]; then
+            echo "App deployment failed!"
+            exit 1
+          fi
+          
+          echo "Waiting 30 seconds..."
+          sleep 30
+        done
+    
+    - name: Run database migrations
+      run: |
+        APP_ID="${{ needs.deploy-infrastructure.outputs.app_id }}"
+        
+        echo "Running database migrations..."
+        doctl apps exec $APP_ID \
+          --component api-service \
+          --command "npm run migrate"
+
+  smoke-tests:
+    needs: [determine-environment, deploy-infrastructure, run-migrations]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.determine-environment.outputs.environment }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Run smoke tests
+      run: |
+        APP_URL="${{ needs.deploy-infrastructure.outputs.app_url }}"
+        
+        echo "Running smoke tests against $APP_URL"
+        
+        # Health check
+        curl -f "$APP_URL/health" || exit 1
+        
+        # API docs check
+        curl -f "$APP_URL/api-docs.json" || exit 1
+        
+        # Support data check
+        curl -f "$APP_URL/api/support-data/status" || exit 1
+        
+        echo "All smoke tests passed!"
+
+  notify:
+    needs: [determine-environment, deploy-infrastructure, smoke-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Notify deployment result
+      run: |
+        ENV="${{ needs.determine-environment.outputs.environment }}"
+        APP_URL="${{ needs.deploy-infrastructure.outputs.app_url }}"
+        
+        if [[ "${{ needs.smoke-tests.result }}" == "success" ]]; then
+          echo "✅ Deployment to $ENV successful!"
+          echo "🌐 App URL: $APP_URL"
+        else
+          echo "❌ Deployment to $ENV failed!"
+        fi

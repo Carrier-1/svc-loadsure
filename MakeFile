@@ -211,7 +211,7 @@ ports:
 test-setup:
 	@echo "Setting up test environment..."
 	npm install node-fetch@2 uuid
-	chmod +x run-e2e-test.sh
+	chmod +x ./scripts/run-e2e-test.sh
 
 unit-test:
 	@echo "Running unit tests..."
@@ -220,7 +220,7 @@ unit-test:
 e2e-test: test-setup
 	@echo "Running E2E tests..."
 	@export API_URL=http://localhost:$(API_PORT)/api && \
-	./run-e2e-test.sh
+	./scripts/run-e2e-test.sh
 
 test: test-setup unit-test e2e-test
 	@echo "All tests completed."
