@@ -186,6 +186,16 @@ function createSimpleTestPayload(testId) {
     assuredName: "Simple Test Company LLC",
     assuredEmail: `simple-company-${testId}@example.com`,
     
+    // Required address fields for Loadsure API
+    originAddress1: "123 Simple Pickup Street",
+    originAddress2: "Unit A",
+    originPostal: "60601",
+    originCountry: "USA",
+    destinationAddress1: "456 Simple Delivery Avenue", 
+    destinationAddress2: "Building B",
+    destinationPostal: "80202",
+    destinationCountry: "USA",
+    
     // Optional fields
     currency: "USD",
     dimensionLength: 48,
@@ -197,6 +207,16 @@ function createSimpleTestPayload(testId) {
     commodityId: 7, // Electronics
     loadTypeId: "FULL_TRUCKLOAD_1",
     equipmentTypeId: 2, // Dry Van
+    
+    // Carrier information
+    carrierName: `Simple Test Carrier ${testId}`,
+    carrierEmail: `simple-carrier-${testId}@example.com`,
+    carrierPhone: "555-987-6543",
+    carrierDotNumber: "87654321",
+    carrierEquipmentType: 2, // Dry Van
+    carrierMode: "ROAD",
+    carrierIdType: "USDOT",
+    carrierIdValue: "87654321",
     
     // Integration fee
     integrationFeeType: "percentage",
