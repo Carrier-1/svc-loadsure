@@ -571,7 +571,7 @@ async function runFullTestCycle(testRunNumber) {
   
   console.log(`\n🚀 Starting test run ${testRunNumber} with ID: ${testId}`);
   console.log(`===================================================`);
-  
+  const cancellationReason = generateRandomCancellationReason();
   // Test support data first
   const supportDataSuccess = await testSupportData();
   if (!supportDataSuccess) {
