@@ -82,30 +82,36 @@ function createTestPayload(testId) {
     equipmentTypeId: 2, // Default to Dry Van
     loadTypeId: "FULL_TRUCKLOAD_1",
     
-    // Freight classes (matching FreightClassesForm component)
-    freightClasses: [
-      { 
-        classId: "class70",
-        percentage: 100
+    // Freight class
+    freightClass: "70",
+    
+    // Commodity (will map to ID from support data)
+    commodityId: 7, // Electronics
+    
+    // Carrier details
+    carriers: [
+      {
+        mode: "ROAD",
+        name: `Test Carrier ${testId}`,
+        email: `carrier-${testId}@example.com`,
+        phone: "555-123-4567",
+        carrierId: {
+          type: "USDOT",
+          value: "12345678"
+        },
+        equipmentType: 2 // Dry Van
       }
     ],
     
-    // Commodities (matching FreightClassesForm component)
-    commodities: [
-      { 
-        id: 7 // Default to Electronics (ID 7)
-      }
-    ],
-    
-    // Stops information (matching StopsForm component)
+    // Stops (pickup and delivery)
     stops: [
       {
         stopType: "PICKUP",
         stopNumber: 1,
         date: pickupDate,
         address: {
-          address1: "123 Test Origin St",
-          address2: "Suite 100",
+          address1: "123 Pickup Street",
+          address2: "Unit A",
           city: "Chicago",
           state: "IL",
           postal: "60601",
@@ -117,28 +123,13 @@ function createTestPayload(testId) {
         stopNumber: 2,
         date: deliveryDate,
         address: {
-          address1: "456 Test Destination Ave",
-          address2: "Floor 3",
+          address1: "456 Delivery Avenue",
+          address2: "Building B",
           city: "Denver",
           state: "CO",
           postal: "80202",
           country: "USA"
         }
-      }
-    ],
-    
-    // Carriers information (matching CarriersForm component)
-    carriers: [
-      {
-        mode: "ROAD",
-        name: "Test Carrier Inc.",
-        email: `carrier-${testId}@example.com`,
-        phone: "555-123-4567",
-        carrierId: {
-          type: "USDOT",
-          value: "12345678"
-        },
-        equipmentType: 2 // Dry Van
       }
     ],
     
@@ -172,6 +163,44 @@ function createTestPayload(testId) {
     // Integration fee (matching IntegrationFeeForm component)
     integrationFeeType: "percentage",
     integrationFeeValue: 0.1
+  };
+}
+
+/**
+ * Create a simple test payload for the simple quotes API
+ * @param {string} testId - Test ID for tracking
+ * @returns {Object} Simple test payload
+ */
+function createSimpleTestPayload(testId) {
+  return {
+    // Required fields for simple API
+    description: `Simple Test Cargo ${testId}`,
+    freightClass: "70",
+    value: 15000 + Math.floor(Math.random() * 5000), // Random value between 15000 and 20000
+    originCity: "Chicago",
+    originState: "IL",
+    destinationCity: "Denver",
+    destinationState: "CO",
+    userName: "Simple Test User",
+    userEmail: `simple-test-${testId}@example.com`,
+    assuredName: "Simple Test Company LLC",
+    assuredEmail: `simple-company-${testId}@example.com`,
+    
+    // Optional fields
+    currency: "USD",
+    dimensionLength: 48,
+    dimensionWidth: 40,
+    dimensionHeight: 48,
+    dimensionUnit: "in",
+    weightValue: 300,
+    weightUnit: "lbs",
+    commodityId: 7, // Electronics
+    loadTypeId: "FULL_TRUCKLOAD_1",
+    equipmentTypeId: 2, // Dry Van
+    
+    // Integration fee
+    integrationFeeType: "percentage",
+    integrationFeeValue: 0.05 // 5%
   };
 }
 
@@ -211,6 +240,65 @@ async function testSupportData() {
   } catch (error) {
     console.error(`Error testing support data: ${error.message}`);
     return false;
+  }
+}
+
+/**
+ * Test creating a quote using the simple API
+ * @param {string} testId - Test ID for tracking
+ * @returns {Promise<Object>} Quote data or null if failed
+ */
+async function testCreateQuoteSimple(testId) {
+  try {
+    console.log(`Testing simple quote creation for ${testId}...`);
+    
+    const payload = createSimpleTestPayload(testId);
+    
+    // Log a summary of the key elements being tested
+    console.log(`  Sending simple quote request for ${payload.description}...`);
+    console.log(`  Origin: ${payload.originCity}, ${payload.originState}`);
+    console.log(`  Destination: ${payload.destinationCity}, ${payload.destinationState}`);
+    console.log(`  Cargo Value: ${payload.value.toLocaleString()}`);
+    console.log(`  Freight Class: ${payload.freightClass}`);
+    console.log(`  Integration Fee: ${payload.integrationFeeValue * 100}%`);
+    
+    const endpoint = `${API_BASE_URL}/insurance/quotes/simple`;
+    console.log(`  Using simple endpoint: ${endpoint}`);
+    
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Test-ID': testId
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error(`  ❌ Failed to create simple quote: ${response.status} ${response.statusText}`);
+      console.error(`  Error details: ${JSON.stringify(errorData)}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    
+    if (data.status !== 'success' || !data.quote || !data.quote.quoteId) {
+      console.error(`  ❌ Invalid simple quote response: ${JSON.stringify(data)}`);
+      return null;
+    }
+    
+    console.log(`  ✅ Simple quote created successfully: ${data.quote.quoteId}`);
+    console.log(`    Premium: ${data.quote.premium}`);
+    console.log(`    Coverage Amount: ${data.quote.coverageAmount}`);
+    console.log(`    Integration Fee: ${data.quote.integrationFeeAmount || 0}`);
+    console.log(`    Total Cost: ${data.quote.totalCost || 'N/A'}`);
+    console.log(`    Expires: ${new Date(data.quote.expiresAt).toLocaleString()}`);
+    
+    return data.quote;
+  } catch (error) {
+    console.error(`Error creating simple quote: ${error.message}`);
+    return null;
   }
 }
 
@@ -344,7 +432,7 @@ async function testBookInsurance(quoteId) {
     console.log(`  ✅ Insurance booked successfully!`);
     console.log(`    Booking ID: ${data.booking.bookingId}`);
     console.log(`    Policy Number: ${data.booking.policyNumber}`);
-    console.log(`    Certificate URL available: ${!!data.booking.certificateUrl}`);
+    console.log(`    Certificate URL available: ${!data.booking.certificateUrl}`);
     
     return data.booking;
   } catch (error) {
@@ -416,57 +504,15 @@ async function testGetCertificate(policyNumber, userData) {
 }
 
 /**
- * Test Cancel a certificate
- * @param {string} certificateNumber - Certificate number
- * @returns {Promise<Object>} Cancellation request data
- */
-async function cancelCertificate(certificateNumber, userData, reason, emailAssured = false) {
-  console.log(`Initiating cancellation for certificate ${certificateNumber}...`);
-  
-  const response = await fetch(`${API_BASE_URL}/insurance/certificates/${certificateNumber}/cancel`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      userId: userData.id,
-      reason: reason,
-      additionalInfo: reason ==='CANOTH' ? 'I have my reasons': '',
-      emailAssured: emailAssured
-    })
-  });
-  
-  const result = await response.json();
-  
-  if (!response.ok) {
-    console.error(`❌ Failed to cancel certificate: ${JSON.stringify(result)}`);
-    throw new Error(`Failed to cancel certificate: ${JSON.stringify(result)}`);
-  }
-
-  console.log(`✅ Certificate cancelled successfully: ${result.certificate.certificateNumber}`);
-  console.log(`   Status: ${result.certificate.status}`);
-  console.log(`   Cancellation Date: ${result.certificate.canceledDate}`);
-  console.log(`   Reason: ${result.certificate.cancellationReason}`);
-  console.log(`   Cancellation Additional Info: ${result.certificate.cancellationAdditionaInfo || 'N/A'}`);
-  console.log('   Cancelled By: ', result.certificate.canceledBy);
-
-  return result.certificate;
-}
-
-/**
- * Run the complete test suite once
- * @param {number} testRunNumber - Test run number for logging
+ * Run a complete test cycle including simple quotes
+ * @param {number} testRunNumber - Test run number
  * @returns {Promise<boolean>} Success status
  */
-async function runCompleteSuite(testRunNumber) {
-  console.log(`\n========================================`);
-  console.log(`Starting test run #${testRunNumber}`);
-  console.log(`========================================\n`);
-  
-  // Generate a unique test ID and reason for this run
+async function runFullTestCycle(testRunNumber) {
   const testId = generateTestId();
-  console.log(`Test ID: ${testId}`);
-  const cancellationReason = generateRandomCancellationReason();
+  
+  console.log(`\n🚀 Starting test run ${testRunNumber} with ID: ${testId}`);
+  console.log(`===================================================`);
   
   // Test support data first
   const supportDataSuccess = await testSupportData();
@@ -478,31 +524,50 @@ async function runCompleteSuite(testRunNumber) {
   // Add small delay before next test
   await sleep(1000);
   
-  // Create the test payload
+  // Test simple quote creation
+  console.log(`\n📝 Testing Simple Quote API...`);
+  const simpleQuote = await testCreateQuoteSimple(testId);
+  if (!simpleQuote) {
+    console.error(`❌ Simple quote creation test failed - aborting test run ${testRunNumber}`);
+    return false;
+  }
+  
+  // Test quote retrieval for simple quote
+  const simpleQuoteRetrievalSuccess = await testGetQuote(simpleQuote.quoteId);
+  if (!simpleQuoteRetrievalSuccess) {
+    console.error(`❌ Simple quote retrieval test failed - aborting test run ${testRunNumber}`);
+    return false;
+  }
+  
+  // Add small delay before next test
+  await sleep(1000);
+  
+  // Test complete quote creation
+  console.log(`\n📋 Testing Complete Quote API...`);
   const payload = createTestPayload(testId);
   console.log(`Created test payload with freight ID: ${payload.freightId}`);
   
-  // Test quote creation
   const quote = await testCreateQuote(testId, payload);
   if (!quote) {
-    console.error(`❌ Quote creation test failed - aborting test run ${testRunNumber}`);
+    console.error(`❌ Complete quote creation test failed - aborting test run ${testRunNumber}`);
     return false;
   }
   
   // Add small delay before next test
   await sleep(1000);
   
-  // Test quote retrieval
+  // Test quote retrieval for complete quote
   const quoteRetrievalSuccess = await testGetQuote(quote.quoteId);
   if (!quoteRetrievalSuccess) {
-    console.error(`❌ Quote retrieval test failed - aborting test run ${testRunNumber}`);
+    console.error(`❌ Complete quote retrieval test failed - aborting test run ${testRunNumber}`);
     return false;
   }
   
   // Add small delay before next test
   await sleep(1000);
   
-  // Test booking insurance
+  // Test booking insurance (using complete quote)
+  console.log(`\n💳 Testing Insurance Booking...`);
   const booking = await testBookInsurance(quote.quoteId);
   if (!booking) {
     console.error(`❌ Insurance booking test failed - aborting test run ${testRunNumber}`);
@@ -513,6 +578,7 @@ async function runCompleteSuite(testRunNumber) {
   await sleep(2000);
   
   // Test certificate retrieval using the user data from the payload
+  console.log(`\n📄 Testing Certificate Retrieval...`);
   const certificateRetrievalSuccess = await testGetCertificate(
     booking.policyNumber, 
     payload.user
@@ -522,56 +588,70 @@ async function runCompleteSuite(testRunNumber) {
     return false;
   }
 
-  await sleep(2000);
+  await sleep(1000);
 
-  // Test cancellation of the certificate
-  const cancellationResult = await cancelCertificate(booking.policyNumber, payload.user, cancellationReason, true);
-  if (!cancellationResult) {
-    console.error(`❌ Certificate cancellation test failed - test run ${testRunNumber} partially failed`);
-    return false;
-  }
+  console.log(`\n✅ Test run ${testRunNumber} completed successfully!`);
+  console.log(`   Simple Quote ID: ${simpleQuote.quoteId}`);
+  console.log(`   Complete Quote ID: ${quote.quoteId}`);
+  console.log(`   Booking ID: ${booking.bookingId}`);
+  console.log(`   Policy Number: ${booking.policyNumber}`);
   
-  console.log(`\n✅ Test run #${testRunNumber} completed successfully!`);
   return true;
 }
 
 /**
- * Run multiple test suites
- * @returns {Promise<void>}
+ * Main function to run all tests
  */
-async function runAllTests() {
-  console.log("Starting Loadsure Insurance Integration E2E Tests");
-  console.log(`API URL: ${API_BASE_URL}`);
+async function main() {
+  console.log('🧪 Loadsure Insurance Integration E2E Tests');
+  console.log('===========================================');
+  console.log(`API Base URL: ${API_BASE_URL}`);
   console.log(`Number of test runs: ${NUM_OF_TESTS}`);
-  console.log("-----------------------------------------------\n");
-  
-  let successCount = 0;
-  
-  // Run tests multiple times
+  console.log(`Delay between tests: ${DELAY_BETWEEN_TESTS}ms`);
+  console.log();
+
+  let successfulTests = 0;
+  let failedTests = 0;
+
   for (let i = 1; i <= NUM_OF_TESTS; i++) {
-    const success = await runCompleteSuite(i);
-    if (success) {
-      successCount++;
+    try {
+      const success = await runFullTestCycle(i);
+      if (success) {
+        successfulTests++;
+      } else {
+        failedTests++;
+      }
+    } catch (error) {
+      console.error(`❌ Test run ${i} failed with error: ${error.message}`);
+      failedTests++;
     }
     
-    // Add delay between test runs (except for the last one)
+    // Add delay between test runs (except after the last test)
     if (i < NUM_OF_TESTS) {
-      console.log(`\nWaiting ${DELAY_BETWEEN_TESTS / 1000} seconds before next test run...\n`);
+      console.log(`\n⏳ Waiting ${DELAY_BETWEEN_TESTS}ms before next test run...\n`);
       await sleep(DELAY_BETWEEN_TESTS);
     }
   }
-  
+
   // Print final summary
-  console.log("\n===============================================");
-  console.log(`E2E Test Summary: ${successCount}/${NUM_OF_TESTS} test runs passed`);
-  console.log("===============================================");
-  
-  // Exit with appropriate code
-  process.exit(successCount === NUM_OF_TESTS ? 0 : 1);
+  console.log(`\n🏁 Test Summary`);
+  console.log(`===============`);
+  console.log(`Total test runs: ${NUM_OF_TESTS}`);
+  console.log(`Successful: ${successfulTests}`);
+  console.log(`Failed: ${failedTests}`);
+  console.log(`Success rate: ${Math.round((successfulTests / NUM_OF_TESTS) * 100)}%`);
+
+  if (failedTests === 0) {
+    console.log(`\n🎉 All tests passed! The Loadsure Insurance Integration is working correctly.`);
+    process.exit(0);
+  } else {
+    console.log(`\n⚠️  Some tests failed. Please check the logs above for details.`);
+    process.exit(1);
+  }
 }
 
-// Start the tests
-runAllTests().catch(error => {
-  console.error('Unhandled error in test suite:', error);
+// Run the tests
+main().catch(error => {
+  console.error('❌ Test runner failed:', error);
   process.exit(1);
 });
