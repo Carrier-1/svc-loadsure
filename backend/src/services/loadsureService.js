@@ -338,7 +338,7 @@ async function setupConsumers(channel, loadsureApi) {
         const userId = data.userId;
         const reason = data.reason || 'Client Request';
         const additionalInfo = data.additionalInfo || '';
-        const emailAssured = data.emailAssured || '';
+        const emailAssured = data.emailAssured || false;
         
         console.log(`Processing certificate cancellation request: ${requestId}, Certificate: ${certificateNumber}`);
         
