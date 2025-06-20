@@ -56,7 +56,7 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
-        cache-dependency-path: './backend/package-lock.json'
+        cache-dependency-path: 'backend/package-lock.json'
     
     - name: Install dependencies
       run: |
@@ -103,6 +103,16 @@ jobs:
         terraform_version: 1.6.0
         terraform_wrapper: false
     
+    - name: Create temporary Terraform configuration for validation
+      run: |
+        cd terraform
+        # Create a temporary main.tf without backend for validation
+        cp main.tf main.tf.backup
+        
+        # Remove the backend block for validation
+        sed '/backend "s3" {/,/}/d' main.tf > main_no_backend.tf
+        mv main_no_backend.tf main.tf
+    
     - name: Validate App Platform specs
       run: |
         # Basic YAML validation
@@ -126,10 +136,10 @@ jobs:
         cd terraform
         terraform fmt -check -recursive
     
-    - name: Terraform validate (staging)
+    - name: Terraform validate and plan (staging)
       run: |
         cd terraform
-        terraform init -backend=false
+        terraform init
         terraform validate
         terraform plan \
           -var-file="environments/staging/terraform.tfvars" \
@@ -138,17 +148,21 @@ jobs:
           -var="rabbitmq_url=fake-url" \
           -out=tfplan-staging
     
-    - name: Terraform validate (production)
+    - name: Terraform validate and plan (production)
       run: |
         cd terraform
-        terraform init -backend=false
-        terraform validate
         terraform plan \
           -var-file="environments/production/terraform.tfvars" \
           -var="do_token=fake-token" \
           -var="loadsure_api_key=fake-key" \
           -var="rabbitmq_url=fake-url" \
           -out=tfplan-production
+    
+    - name: Restore original Terraform configuration
+      if: always()
+      run: |
+        cd terraform
+        mv main.tf.backup main.tf
 
   # In trunk-based development, checking for drift is crucial
   check-app-platform-drift:
