@@ -141,6 +141,8 @@ jobs:
     - name: Terraform validate (production)
       run: |
         cd terraform
+        terraform init -backend=false
+        terraform validate
         terraform plan \
           -var-file="environments/production/terraform.tfvars" \
           -var="do_token=fake-token" \
