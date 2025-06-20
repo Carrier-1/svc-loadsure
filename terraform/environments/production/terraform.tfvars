@@ -1,14 +1,14 @@
-environment      = "production"
-github_branch    = "main"
-auto_deploy      = false # Manual deployments for production
-domain_name      = "carrier1-svc-loadsure-api.ondigitalocean.app"
+environment   = "production"
+github_branch = "main"
+auto_deploy   = false # Manual deployments for production
+domain_name   = "carrier1-svc-loadsure-api.ondigitalocean.app"
 
 # Instance sizing
-api_instance_count     = 2
-api_instance_size      = "basic-s"
-worker_instance_count  = 2
-worker_instance_size   = "basic-s"
-worker_concurrency     = 3
+api_instance_count    = 2
+api_instance_size     = "basic-s"
+worker_instance_count = 2
+worker_instance_size  = "basic-s"
+worker_concurrency    = 3
 
 # Rate limiting
 rate_limit_max_requests = 100

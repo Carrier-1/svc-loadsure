@@ -1,14 +1,14 @@
-environment      = "staging"
-github_branch    = "main"
-auto_deploy      = true
-domain_name      = "dev-carrier1-svc-loadsure-api.ondigitalocean.app"
+environment   = "staging"
+github_branch = "main"
+auto_deploy   = true
+domain_name   = "dev-carrier1-svc-loadsure-api.ondigitalocean.app"
 
 # Instance sizing
-api_instance_count     = 1
-api_instance_size      = "basic-xxs"
-worker_instance_count  = 1
-worker_instance_size   = "basic-xxs"
-worker_concurrency     = 2
+api_instance_count    = 1
+api_instance_size     = "basic-xxs"
+worker_instance_count = 1
+worker_instance_size  = "basic-xxs"
+worker_concurrency    = 2
 
 # Rate limiting
 rate_limit_max_requests = 200

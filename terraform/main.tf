@@ -6,13 +6,13 @@ terraform {
       version = "~> 2.0"
     }
   }
-  
+
   backend "s3" {
     # Use DigitalOcean Spaces for state
-    endpoint                   = "https://nyc3.digitaloceanspaces.com"
-    bucket                     = "carrier1-terraform-state"
-    key                        = "svc-loadsure/terraform.tfstate"
-    region                     = "us-east-1"
+    endpoint                    = "https://nyc3.digitaloceanspaces.com"
+    bucket                      = "carrier1-terraform-state"
+    key                         = "svc-loadsure/terraform.tfstate"
+    region                      = "us-east-1"
     skip_credentials_validation = true
     skip_metadata_api_check     = true
   }
@@ -35,7 +35,7 @@ resource "digitalocean_app" "svc_loadsure" {
   spec {
     name   = "svc-loadsure-${var.environment}"
     region = var.region
-    
+
     # Connect app to VPC
     vpc_uuid = digitalocean_vpc.loadsure_vpc.id
 
@@ -276,15 +276,15 @@ resource "digitalocean_app" "svc_loadsure" {
 
 # PostgreSQL Database
 resource "digitalocean_database_cluster" "postgres" {
-  name       = "svc-loadsure-postgres-${var.environment}"
-  engine     = "pg"
-  version    = "15"
-  size       = var.postgres_size
-  region     = var.region
-  node_count = var.postgres_node_count
-  vpc_id     = digitalocean_vpc.loadsure_vpc.id
+  name                 = "svc-loadsure-postgres-${var.environment}"
+  engine               = "pg"
+  version              = "15"
+  size                 = var.postgres_size
+  region               = var.region
+  node_count           = var.postgres_node_count
+  vpc_id               = digitalocean_vpc.loadsure_vpc.id
   private_network_uuid = digitalocean_vpc.loadsure_vpc.id
-  
+
   tags = [var.environment, "svc-loadsure", "database"]
 }
 
@@ -300,15 +300,15 @@ resource "digitalocean_database_user" "app_user" {
 
 # Redis Database
 resource "digitalocean_database_cluster" "redis" {
-  name       = "svc-loadsure-redis-${var.environment}"
-  engine     = "redis"
-  version    = "7"
-  size       = var.redis_size
-  region     = var.region
-  node_count = 1
-  vpc_id     = digitalocean_vpc.loadsure_vpc.id
+  name                 = "svc-loadsure-redis-${var.environment}"
+  engine               = "redis"
+  version              = "7"
+  size                 = var.redis_size
+  region               = var.region
+  node_count           = 1
+  vpc_id               = digitalocean_vpc.loadsure_vpc.id
   private_network_uuid = digitalocean_vpc.loadsure_vpc.id
-  
+
   tags = [var.environment, "svc-loadsure", "cache"]
 }
 
