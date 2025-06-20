@@ -56,7 +56,7 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
-        cache-dependency-path: backend/package-lock.json
+        cache-dependency-path: './backend/package-lock.json'
     
     - name: Install dependencies
       run: |
@@ -214,7 +214,7 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
-        cache-dependency-path: backend/package-lock.json
+        cache-dependency-path: './backend/package-lock.json'
     
     - name: Install dependencies
       run: |
@@ -251,9 +251,7 @@ jobs:
       uses: trufflesecurity/trufflehog@main
       with:
         path: ./
-        base: ${{ github.event.repository.default_branch }}
-        head: HEAD
-        extra_args: --debug --only-verified
+        extra_args: --debug --only-verified --max-depth 50
     
     - name: OWASP Dependency Check
       uses: dependency-check/Dependency-Check_Action@main
