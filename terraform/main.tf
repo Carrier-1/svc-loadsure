@@ -36,9 +36,6 @@ resource "digitalocean_app" "svc_loadsure" {
     name   = "svc-loadsure-${var.environment}"
     region = var.region
 
-    # Connect app to VPC
-    vpc_uuid = digitalocean_vpc.loadsure_vpc.id
-
     # API Service
     service {
       name               = "api-service"
@@ -282,7 +279,6 @@ resource "digitalocean_database_cluster" "postgres" {
   size                 = var.postgres_size
   region               = var.region
   node_count           = var.postgres_node_count
-  vpc_id               = digitalocean_vpc.loadsure_vpc.id
   private_network_uuid = digitalocean_vpc.loadsure_vpc.id
 
   tags = [var.environment, "svc-loadsure", "database"]
@@ -306,7 +302,6 @@ resource "digitalocean_database_cluster" "redis" {
   size                 = var.redis_size
   region               = var.region
   node_count           = 1
-  vpc_id               = digitalocean_vpc.loadsure_vpc.id
   private_network_uuid = digitalocean_vpc.loadsure_vpc.id
 
   tags = [var.environment, "svc-loadsure", "cache"]
@@ -347,6 +342,13 @@ resource "digitalocean_spaces_bucket" "assets" {
   name   = "svc-loadsure-assets-${var.environment}"
   region = var.region
   acl    = "public-read"
+}
+
+# CORS configuration for the bucket (separate resource)
+resource "digitalocean_spaces_bucket_cors_configuration" "assets_cors" {
+  count  = var.create_spaces_bucket ? 1 : 0
+  bucket = digitalocean_spaces_bucket.assets[0].name
+  region = digitalocean_spaces_bucket.assets[0].region
 
   cors_rule {
     allowed_headers = ["*"]
