@@ -9,12 +9,16 @@ terraform {
 
   backend "s3" {
     # Use DigitalOcean Spaces for state
-    endpoint                    = "https://nyc3.digitaloceanspaces.com"
+    endpoints = {
+      s3 = "https://nyc3.digitaloceanspaces.com"
+    }
     bucket                      = "dev-carrier1"
-    key                         = "svc-loadsure/terraform.tfstate"
+    key                         = "terraform/state"
     region                      = "us-east-1"
     skip_credentials_validation = true
     skip_metadata_api_check     = true
+    skip_region_validation      = true
+    force_path_style           = true
   }
 }
 
