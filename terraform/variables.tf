@@ -19,6 +19,12 @@ variable "region" {
   default     = "nyc3"
 }
 
+variable "vpc_ip_range" {
+  description = "IP range for the VPC network (CIDR notation)"
+  type        = string
+  default     = "10.10.0.0/16"
+}
+
 variable "github_branch" {
   description = "GitHub branch to deploy"
   type        = string

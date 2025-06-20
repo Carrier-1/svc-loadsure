@@ -22,11 +22,22 @@ provider "digitalocean" {
   token = var.do_token
 }
 
+# Create a VPC for network isolation
+resource "digitalocean_vpc" "loadsure_vpc" {
+  name        = "svc-loadsure-vpc-${var.environment}"
+  region      = var.region
+  description = "VPC for Loadsure ${var.environment} services"
+  ip_range    = var.vpc_ip_range
+}
+
 # Create the app
 resource "digitalocean_app" "svc_loadsure" {
   spec {
     name   = "svc-loadsure-${var.environment}"
     region = var.region
+    
+    # Connect app to VPC
+    vpc_uuid = digitalocean_vpc.loadsure_vpc.id
 
     # API Service
     service {
@@ -104,14 +115,14 @@ resource "digitalocean_app" "svc_loadsure" {
 
       env {
         key   = "DATABASE_URL"
-        value = digitalocean_database_cluster.postgres.uri
+        value = digitalocean_database_cluster.postgres.private_uri
         type  = "SECRET"
         scope = "RUN_TIME"
       }
 
       env {
         key   = "REDIS_URL"
-        value = digitalocean_database_cluster.redis.uri
+        value = digitalocean_database_cluster.redis.private_uri
         type  = "SECRET"
         scope = "RUN_TIME"
       }
@@ -170,14 +181,14 @@ resource "digitalocean_app" "svc_loadsure" {
 
       env {
         key   = "DATABASE_URL"
-        value = digitalocean_database_cluster.postgres.uri
+        value = digitalocean_database_cluster.postgres.private_uri
         type  = "SECRET"
         scope = "RUN_TIME"
       }
 
       env {
         key   = "REDIS_URL"
-        value = digitalocean_database_cluster.redis.uri
+        value = digitalocean_database_cluster.redis.private_uri
         type  = "SECRET"
         scope = "RUN_TIME"
       }
@@ -239,7 +250,7 @@ resource "digitalocean_app" "svc_loadsure" {
       # Secrets
       env {
         key   = "REDIS_URL"
-        value = digitalocean_database_cluster.redis.uri
+        value = digitalocean_database_cluster.redis.private_uri
         type  = "SECRET"
         scope = "RUN_TIME"
       }
@@ -271,6 +282,8 @@ resource "digitalocean_database_cluster" "postgres" {
   size       = var.postgres_size
   region     = var.region
   node_count = var.postgres_node_count
+  vpc_id     = digitalocean_vpc.loadsure_vpc.id
+  private_network_uuid = digitalocean_vpc.loadsure_vpc.id
   
   tags = [var.environment, "svc-loadsure", "database"]
 }
@@ -293,6 +306,8 @@ resource "digitalocean_database_cluster" "redis" {
   size       = var.redis_size
   region     = var.region
   node_count = 1
+  vpc_id     = digitalocean_vpc.loadsure_vpc.id
+  private_network_uuid = digitalocean_vpc.loadsure_vpc.id
   
   tags = [var.environment, "svc-loadsure", "cache"]
 }
@@ -303,6 +318,27 @@ resource "digitalocean_container_registry" "main" {
   name                   = "svc-loadsure"
   subscription_tier_slug = "basic"
   region                 = var.region
+}
+
+# Create a firewall for the database clusters
+resource "digitalocean_database_firewall" "postgres_firewall" {
+  cluster_id = digitalocean_database_cluster.postgres.id
+
+  # Allow access only from resources in the same VPC
+  rule {
+    type  = "vpc"
+    value = digitalocean_vpc.loadsure_vpc.id
+  }
+}
+
+resource "digitalocean_database_firewall" "redis_firewall" {
+  cluster_id = digitalocean_database_cluster.redis.id
+
+  # Allow access only from resources in the same VPC
+  rule {
+    type  = "vpc"
+    value = digitalocean_vpc.loadsure_vpc.id
+  }
 }
 
 # Spaces bucket for assets (optional)

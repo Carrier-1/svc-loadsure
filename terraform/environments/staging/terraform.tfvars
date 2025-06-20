@@ -1,5 +1,5 @@
 environment = "staging"
-github_branch = "develop"
+github_branch = "main"
 auto_deploy = true
 domain_name = "dev-carrier1-svc-loadsure-api.ondigitalocean.app"
 

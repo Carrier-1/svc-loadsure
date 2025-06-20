@@ -6,7 +6,7 @@ services:
     source_dir: /backend
     github:
       repo: Carrier-1/svc-loadsure
-      branch: develop
+      branch: main
       deploy_on_push: true
     
     run_command: npm start
@@ -58,7 +58,7 @@ services:
     source_dir: /backend
     github:
       repo: Carrier-1/svc-loadsure
-      branch: develop
+      branch: main
       deploy_on_push: true
     
     run_command: node src/services/loadsureService.js
@@ -94,7 +94,7 @@ services:
     source_dir: /backend
     github:
       repo: Carrier-1/svc-loadsure
-      branch: develop
+      branch: main
       deploy_on_push: true
     
     run_command: node src/services/queueMonitorStarter.js

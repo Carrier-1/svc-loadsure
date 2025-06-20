@@ -3,9 +3,7 @@ name: Deploy to DigitalOcean App Platform
 on:
   push:
     branches:
-      - develop  # Auto-deploy staging
-  release:
-    types: [published]  # Deploy production on release
+      - main 
   workflow_dispatch:
     inputs:
       environment:
@@ -17,6 +15,10 @@ on:
         - staging
         - production
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   determine-environment:
     runs-on: ubuntu-latest
@@ -26,24 +28,34 @@ jobs:
     steps:
     - id: env
       run: |
+        # For workflow_dispatch, use the selected environment
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
-        elif [[ "${{ github.event_name }}" == "release" ]]; then
-          echo "environment=production" >> $GITHUB_OUTPUT
-        elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
-          echo "environment=staging" >> $GITHUB_OUTPUT
         else
+          # Default to staging for automated pushes to main
           echo "environment=staging" >> $GITHUB_OUTPUT
         fi
-        echo "terraform_dir=terraform/environments/${{ steps.env.outputs.environment }}" >> $GITHUB_OUTPUT
+        
+        # Set the terraform directory
+        ENV="${{ github.event.inputs.environment || 'staging' }}"
+        echo "terraform_dir=terraform/environments/$ENV" >> $GITHUB_OUTPUT
+
+  validate-deployment:
+    needs: determine-environment
+    runs-on: ubuntu-latest
+    environment: ${{ needs.determine-environment.outputs.environment }}-approval
+    steps:
+    - name: Validate deployment
+      run: echo "Deployment to ${{ needs.determine-environment.outputs.environment }} validated"
 
   deploy-infrastructure:
-    needs: determine-environment
+    needs: [determine-environment, validate-deployment]
     runs-on: ubuntu-latest
     environment: ${{ needs.determine-environment.outputs.environment }}
     outputs:
       app_id: ${{ steps.terraform-apply.outputs.app_id }}
       app_url: ${{ steps.terraform-apply.outputs.app_url }}
+      tf_workspace: ${{ steps.terraform-init.outputs.terraform_workspace }}
     
     steps:
     - name: Checkout code
@@ -61,13 +73,26 @@ jobs:
         token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
     
     - name: Terraform Init
+      id: terraform-init
       run: |
         cd terraform
+        # Use a workspace for better state isolation
+        WORKSPACE="${{ needs.determine-environment.outputs.environment }}"
         terraform init \
           -backend-config="access_key=${{ secrets.SPACES_ACCESS_KEY }}" \
           -backend-config="secret_key=${{ secrets.SPACES_SECRET_KEY }}"
+        
+        # Create or select workspace
+        if terraform workspace list | grep -q "$WORKSPACE"; then
+          terraform workspace select "$WORKSPACE"
+        else
+          terraform workspace new "$WORKSPACE"
+        fi
+        
+        echo "terraform_workspace=$WORKSPACE" >> $GITHUB_OUTPUT
     
     - name: Terraform Plan
+      id: terraform-plan
       run: |
         cd terraform
         terraform plan \
@@ -76,6 +101,13 @@ jobs:
           -var="loadsure_api_key=${{ secrets.LOADSURE_API_KEY }}" \
           -var="rabbitmq_url=${{ secrets.RABBITMQ_URL }}" \
           -out=tfplan
+        
+        # Check if there are changes
+        if terraform show -no-color tfplan | grep -q "No changes."; then
+          echo "has_changes=false" >> $GITHUB_OUTPUT
+        else
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+        fi
     
     - name: Terraform Apply
       id: terraform-apply
@@ -86,52 +118,106 @@ jobs:
         # Output values
         echo "app_id=$(terraform output -raw app_id)" >> $GITHUB_OUTPUT
         echo "app_url=$(terraform output -raw app_live_url)" >> $GITHUB_OUTPUT
+    
+    - name: Capture Terraform Outputs
+      if: success()
+      run: |
+        cd terraform
+        terraform output -json > terraform_output.json
+        
+    - name: Upload Terraform Output
+      if: success()
+      uses: actions/upload-artifact@v3
+      with:
+        name: terraform-output-${{ needs.determine-environment.outputs.environment }}
+        path: terraform/terraform_output.json
+        retention-days: 7
 
-  run-migrations:
+  wait-for-deployment:
     needs: [determine-environment, deploy-infrastructure]
     runs-on: ubuntu-latest
     environment: ${{ needs.determine-environment.outputs.environment }}
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
     - name: Configure DigitalOcean CLI
       uses: digitalocean/action-doctl@v2
       with:
         token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
     
-    - name: Wait for deployment
+    - name: Wait for deployment to complete
       run: |
-        echo "Waiting for app deployment to complete..."
-        sleep 60  # Give the app time to deploy
-        
-        # Check app status
         APP_ID="${{ needs.deploy-infrastructure.outputs.app_id }}"
-        for i in {1..10}; do
-          STATUS=$(doctl apps get $APP_ID --format Status --no-header)
-          echo "App status: $STATUS"
+        echo "Waiting for app deployment to complete for APP_ID: $APP_ID"
+        
+        # Check app status with timeout and exponential backoff
+        TIMEOUT=900  # 15 minutes
+        START_TIME=$(date +%s)
+        BACKOFF=10
+        MAX_BACKOFF=60
+        
+        while true; do
+          CURRENT_TIME=$(date +%s)
+          ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
           
-          if [[ "$STATUS" == "RUNNING" ]]; then
-            echo "App is running!"
-            break
-          elif [[ "$STATUS" == "ERROR" ]]; then
-            echo "App deployment failed!"
+          if [ $ELAPSED_TIME -gt $TIMEOUT ]; then
+            echo "Deployment timed out after $TIMEOUT seconds"
             exit 1
           fi
           
-          echo "Waiting 30 seconds..."
-          sleep 30
+          STATUS=$(doctl apps get $APP_ID --format Status --no-header)
+          echo "App status: $STATUS (Elapsed: ${ELAPSED_TIME}s)"
+          
+          if [[ "$STATUS" == "ACTIVE" || "$STATUS" == "RUNNING" ]]; then
+            echo "App is running!"
+            break
+          elif [[ "$STATUS" == "ERROR" || "$STATUS" == "FAILED" ]]; then
+            echo "App deployment failed!"
+            # Get error details
+            doctl apps get $APP_ID --format Status,ActiveDeployment --no-header
+            exit 1
+          fi
+          
+          # Wait with exponential backoff
+          echo "Waiting ${BACKOFF} seconds before next check..."
+          sleep $BACKOFF
+          
+          # Increase backoff, but not more than MAX_BACKOFF
+          BACKOFF=$((BACKOFF * 2))
+          if [ $BACKOFF -gt $MAX_BACKOFF ]; then
+            BACKOFF=$MAX_BACKOFF
+          fi
         done
+
+  run-migrations:
+    needs: [determine-environment, deploy-infrastructure, wait-for-deployment]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.determine-environment.outputs.environment }}
+    
+    steps:
+    - name: Configure DigitalOcean CLI
+      uses: digitalocean/action-doctl@v2
+      with:
+        token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
     
     - name: Run database migrations
+      id: run-migrations
       run: |
         APP_ID="${{ needs.deploy-infrastructure.outputs.app_id }}"
         
         echo "Running database migrations..."
-        doctl apps exec $APP_ID \
+        OUTPUT=$(doctl apps exec $APP_ID \
           --component api-service \
-          --command "npm run migrate"
+          --command "npm run migrate" 2>&1)
+        
+        echo "Migration output: $OUTPUT"
+        
+        # Check for migration success
+        if echo "$OUTPUT" | grep -i "error\|fail"; then
+          echo "Migration may have failed, check output"
+          exit 1
+        else
+          echo "Migrations completed successfully"
+        fi
 
   smoke-tests:
     needs: [determine-environment, deploy-infrastructure, run-migrations]
@@ -141,23 +227,74 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
     
     - name: Run smoke tests
+      id: smoke-tests
       run: |
         APP_URL="${{ needs.deploy-infrastructure.outputs.app_url }}"
         
         echo "Running smoke tests against $APP_URL"
         
-        # Health check
-        curl -f "$APP_URL/health" || exit 1
+        # Health check with retry logic
+        MAX_RETRIES=5
+        RETRY_COUNT=0
         
-        # API docs check
+        until curl -f "$APP_URL/health" || [ $RETRY_COUNT -eq $MAX_RETRIES ]; do
+          RETRY_COUNT=$((RETRY_COUNT+1))
+          echo "Health check attempt $RETRY_COUNT failed, retrying in 10 seconds..."
+          sleep 10
+        done
+        
+        if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+          echo "Health check failed after $MAX_RETRIES attempts"
+          exit 1
+        fi
+        
+        # Additional endpoint checks
+        echo "Checking API endpoints..."
         curl -f "$APP_URL/api-docs.json" || exit 1
-        
-        # Support data check
         curl -f "$APP_URL/api/support-data/status" || exit 1
         
+        # Check API response content
+        HEALTH_RESPONSE=$(curl -s "$APP_URL/health")
+        if ! echo "$HEALTH_RESPONSE" | grep -q "status.*ok"; then
+          echo "Health endpoint returned unexpected response: $HEALTH_RESPONSE"
+          exit 1
+        fi
+        
         echo "All smoke tests passed!"
+
+  # Gate: Additional production validation step
+  validate-production:
+    needs: [determine-environment, smoke-tests]
+    runs-on: ubuntu-latest
+    if: needs.determine-environment.outputs.environment == 'production'
+    environment: production-final-approval
+    steps:
+    - name: Validate production deployment
+      run: echo "Production deployment validated and approved"
+
+  promote-to-production:
+    needs: [determine-environment, smoke-tests, validate-production]
+    if: needs.determine-environment.outputs.environment == 'production'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+    - name: Configure DigitalOcean CLI
+      uses: digitalocean/action-doctl@v2
+      with:
+        token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+        
+    - name: Finalize production deployment
+      run: |
+        APP_ID="${{ needs.deploy-infrastructure.outputs.app_id }}"
+        echo "Production deployment finalized and validated"
+        doctl apps get $APP_ID --format Status,LiveDomain --no-header
 
   notify:
     needs: [determine-environment, deploy-infrastructure, smoke-tests]
@@ -168,11 +305,17 @@ jobs:
     - name: Notify deployment result
       run: |
         ENV="${{ needs.determine-environment.outputs.environment }}"
-        APP_URL="${{ needs.deploy-infrastructure.outputs.app_url }}"
+        APP_URL="${{ needs.deploy-infrastructure.outputs.app_url || 'Unknown' }}"
         
         if [[ "${{ needs.smoke-tests.result }}" == "success" ]]; then
           echo "✅ Deployment to $ENV successful!"
           echo "🌐 App URL: $APP_URL"
+          EXIT_CODE=0
         else
           echo "❌ Deployment to $ENV failed!"
+          echo "⚠️ Check workflow logs for details"
+          EXIT_CODE=1
         fi
+        
+        # Additional details for notifications to external systems could be added here
+        exit $EXIT_CODE
