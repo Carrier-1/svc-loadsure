@@ -127,7 +127,7 @@ jobs:
         
     - name: Upload Terraform Output
       if: success()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: terraform-output-${{ needs.determine-environment.outputs.environment }}
         path: terraform/terraform_output.json

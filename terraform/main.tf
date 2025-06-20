@@ -9,7 +9,7 @@ terraform {
   
   backend "s3" {
     # Use DigitalOcean Spaces for state
-    endpoint                    = "https://nyc3.digitaloceanspaces.com"
+    endpoint                   = "https://nyc3.digitaloceanspaces.com"
     bucket                     = "carrier1-terraform-state"
     key                        = "svc-loadsure/terraform.tfstate"
     region                     = "us-east-1"
@@ -53,7 +53,7 @@ resource "digitalocean_app" "svc_loadsure" {
         deploy_on_push = var.auto_deploy
       }
 
-      source_dir = "/backend"
+      source_dir  = "/backend"
       run_command = "npm start"
 
       routes {
@@ -61,12 +61,12 @@ resource "digitalocean_app" "svc_loadsure" {
       }
 
       health_check {
-        http_path               = "/health"
-        initial_delay_seconds   = 15
-        period_seconds         = 10
-        timeout_seconds        = 5
-        success_threshold      = 1
-        failure_threshold      = 3
+        http_path             = "/health"
+        initial_delay_seconds = 15
+        period_seconds        = 10
+        timeout_seconds       = 5
+        success_threshold     = 1
+        failure_threshold     = 3
       }
 
       # Environment variables
@@ -148,7 +148,7 @@ resource "digitalocean_app" "svc_loadsure" {
         deploy_on_push = var.auto_deploy
       }
 
-      source_dir = "/backend"
+      source_dir  = "/backend"
       run_command = "node src/services/loadsureService.js"
 
       env {
@@ -214,7 +214,7 @@ resource "digitalocean_app" "svc_loadsure" {
         deploy_on_push = var.auto_deploy
       }
 
-      source_dir = "/backend"
+      source_dir  = "/backend"
       run_command = "node src/services/queueMonitorStarter.js"
 
       env {
