@@ -19,6 +19,8 @@ terraform {
     skip_metadata_api_check     = true
     skip_region_validation      = true
     force_path_style            = true
+    access_key                  = "SPACES_ACCESS_KEY"
+    secret_key                  = "SPACES_SECRET_KEY"
   }
 }
 
