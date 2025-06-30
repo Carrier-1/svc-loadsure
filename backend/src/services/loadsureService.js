@@ -373,15 +373,38 @@ async function setupConsumers(channel, loadsureApi) {
         // Add request ID to the result
         cancellationResult.requestId = requestId;
         
-        // Update certificate in database
-        await DatabaseService.cancelCertificate(certificateNumber, cancellationResult);
-        
-        // Publish cancellation confirmed event
-        await channel.sendToQueue(
-          config.QUEUE_CERTIFICATE_CANCELLATION_CONFIRMED,
-          Buffer.from(JSON.stringify(cancellationResult)),
-          { persistent: true }
-        );
+        // Check if the result contains an error (success: false property)
+        if (cancellationResult.success === false) {
+          console.error(`Certificate cancellation failed: ${cancellationResult.error}`);
+          
+          // Format error response
+          const errorResponse = {
+            requestId: requestId,
+            certificateNumber: certificateNumber,
+            error: cancellationResult.error,
+            details: cancellationResult.details,
+            status: 'failed'
+          };
+          
+          // Send error response back to the API
+          await channel.sendToQueue(
+            config.QUEUE_CERTIFICATE_CANCELLATION_CONFIRMED,
+            Buffer.from(JSON.stringify(errorResponse)),
+            { persistent: true }
+          );
+          
+          console.log(`Sent error response for cancellation request: ${requestId}`);
+        } else {
+          // Update certificate in database
+          await DatabaseService.cancelCertificate(certificateNumber, cancellationResult);
+          
+          // Publish cancellation confirmed event
+          await channel.sendToQueue(
+            config.QUEUE_CERTIFICATE_CANCELLATION_CONFIRMED,
+            Buffer.from(JSON.stringify(cancellationResult)),
+            { persistent: true }
+          );
+        }
         
         const processingTime = Date.now() - startTime;
         console.log(`Certificate cancellation confirmed for request: ${requestId} (took ${processingTime}ms)`);

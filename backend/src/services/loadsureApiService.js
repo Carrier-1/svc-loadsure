@@ -774,7 +774,13 @@ class LoadsureApiService {
       };
     } catch (error) {
       console.error('Error cancelling certificate with Loadsure API:', error);
-      throw error;
+      // Return structured error object instead of just throwing
+      return {
+        success: false,
+        error: error.message || 'Unknown error during certificate cancellation',
+        details: error.toString(),
+        certificateNumber
+      };
     }
   }
 }
