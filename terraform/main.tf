@@ -9,18 +9,18 @@ terraform {
 
   backend "s3" {
     # Use DigitalOcean Spaces for state
-    endpoints = {
-      s3 = "https://nyc3.digitaloceanspaces.com"
-    }
+    endpoint                    = "https://nyc3.digitaloceanspaces.com"
     bucket                      = "dev-carrier1"
     key                         = "terraform/state"
+    workspace_key_prefix        = "env"
     region                      = "us-east-1"
     skip_credentials_validation = true
     skip_metadata_api_check     = true
     skip_region_validation      = true
     force_path_style            = true
-    access_key                  = "SPACES_ACCESS_KEY"
-    secret_key                  = "SPACES_SECRET_KEY"
+    # Placeholder values - in CI these would be injected from environment variables
+    access_key                  = "DO_SPACES_KEY"
+    secret_key                  = "DO_SPACES_SECRET"
   }
 }
 
