@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+name: svc-loadsure-config
+namespace: svc-loadsure
+data:
+NODE_ENV: "production"
+DB_DIALECT: "postgres"
+DB_HOST: "postgres"
+DB_PORT: "5432"
+DB_NAME: "loadsure"
+DB_SSL: "false"
+REDIS_URL: "redis://redis:6379"
+RABBITMQ_URL: "amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@rabbitmq:5672"
+LOADSURE_BASE_URL: "https://portal.loadsure.net"
+API_PORT: "3001"
+FRONTEND_PORT: "8081"
+RATE_LIMIT_WINDOW_MS: "60000"
+RATE_LIMIT_MAX_REQUESTS: "100"
+WORKER_CONCURRENCY: "3"
+SUPPORT_DATA_REFRESH_SCHEDULE: "0 0 * * *"
+SCALE_UP_THRESHOLD: "10"
+SCALE_DOWN_THRESHOLD: "2"
+CHECK_INTERVAL: "10000"
+MIN_WORKERS: "1"
+MAX_WORKERS: "5"
