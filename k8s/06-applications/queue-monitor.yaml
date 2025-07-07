@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: queue-monitor
+  namespace: svc-loadsure
+  labels:
+    app: queue-monitor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: queue-monitor
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: queue-monitor
+    spec:
+      serviceAccountName: queue-monitor-sa
+      containers:
+      - name: queue-monitor
+        image: loadsure/queue-monitor:latest
+        imagePullPolicy: Always
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: svc-loadsure-config
+              key: NODE_ENV
+        - name: RABBITMQ_URL
+          valueFrom:
+            configMapKeyRef:
+              name: svc-loadsure-config
+              key: RABBITMQ_URL
+        - name: SCALE_UP_THRESHOLD
+          valueFrom:
+            configMapKeyRef:
+              name: svc-loadsure-config
+              key: SCALE_UP_THRESHOLD
+        - name: SCALE_DOWN_THRESHOLD
+          valueFrom:
+            configMapKeyRef:
+              name: svc-loadsure-config
+              key: SCALE_DOWN_THRESHOLD
+        - name: CHECK_INTERVAL
+          valueFrom:
+            configMapKeyRef:
+              name: svc-loadsure-config
+              key: CHECK_INTERVAL
+        - name: MIN_WORKERS
+          valueFrom:
+            configMapKeyRef:
+              name: svc-loadsure-config
+              key: MIN_WORKERS
+        - name: MAX_WORKERS
+          valueFrom:
+            configMapKeyRef:
+              name: svc-loadsure-config
+              key: MAX_WORKERS
+        - name: TARGET_DEPLOYMENT
+          value: "loadsure-worker"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "100m"
+        livenessProbe:
+          exec:
+            command: ["pgrep", "node"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: queue-monitor-sa
+  namespace: svc-loadsure
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deployment-manager
+  namespace: svc-loadsure
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: queue-monitor-deployment-manager
+  namespace: svc-loadsure
+subjects:
+- kind: ServiceAccount
+  name: queue-monitor-sa
+  namespace: svc-loadsure
+roleRef:
+  kind: Role
+  name: deployment-manager
+  apiGroup: rbac.authorization.k8s.io

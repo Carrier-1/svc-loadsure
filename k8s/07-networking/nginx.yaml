@@ -1,0 +1,126 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-ingress-controller
+  namespace: svc-loadsure
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-ingress
+  template:
+    metadata:
+      labels:
+        app: nginx-ingress
+    spec:
+      serviceAccountName: nginx-ingress-serviceaccount
+      containers:
+      - name: nginx-ingress-controller
+        image: k8s.gcr.io/ingress-nginx/controller:v1.2.0
+        args:
+        - /nginx-ingress-controller
+        - --publish-service=$(POD_NAMESPACE)/nginx-ingress
+        - --election-id=ingress-controller-leader
+        - --ingress-class=nginx
+        - --configmap=$(POD_NAMESPACE)/nginx-configuration
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        ports:
+        - name: http
+          containerPort: 80
+        - name: https
+          containerPort: 443
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 10254
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 10254
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-ingress
+  namespace: svc-loadsure
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+  - name: https
+    port: 443
+    targetPort: 443
+  selector:
+    app: nginx-ingress
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nginx-ingress-serviceaccount
+  namespace: svc-loadsure
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nginx-ingress-clusterrole
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "endpoints", "nodes", "pods", "secrets"]
+  verbs: ["list", "watch"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["extensions", "networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+- apiGroups: ["extensions", "networking.k8s.io"]
+  resources: ["ingresses/status"]
+  verbs: ["update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nginx-ingress-clusterrole-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nginx-ingress-clusterrole
+subjects:
+- kind: ServiceAccount
+  name: nginx-ingress-serviceaccount
+  namespace: svc-loadsure
