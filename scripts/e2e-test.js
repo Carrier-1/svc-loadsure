@@ -562,6 +562,93 @@ async function cancelCertificate(certificateNumber, userData, reason, emailAssur
 }
 
 /**
+ * Test the improved error handling for future pickup dates
+ * This tests the specific scenario of submitting a pickup date more than 30 days in the future,
+ * which should return a clear error message rather than a complex JSON structure
+ * @param {string} testId - Test ID for tracking
+ * @returns {Promise<boolean>} Success status
+ */
+async function testFuturePickupDateError(testId) {
+  try {
+    console.log(`\n⚠️ Testing error handling for future pickup dates with ${testId}...`);
+    
+    // Create a standard test payload
+    const payload = createTestPayload(testId);
+    
+    // Modify the pickup date to be more than 30 days in the future
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 40); // 40 days in the future
+    const futureDateString = futureDate.toISOString().split('T')[0];
+    
+    // Find the pickup stop and update its date
+    for (let i = 0; i < payload.stops.length; i++) {
+      if (payload.stops[i].stopType === "PICKUP") {
+        payload.stops[i].date = futureDateString;
+        break;
+      }
+    }
+    
+    // Also update the pickup date field if it exists
+    if (payload.pickupDate) {
+      payload.pickupDate = futureDateString;
+    }
+    
+    console.log(`  Sending quote request with pickup date ${futureDateString} (40 days in the future)...`);
+    
+    const endpoint = `${API_BASE_URL}/insurance/quotes`;
+    
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Test-ID': testId
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    // We expect this request to fail with a 400 status
+    if (response.status === 400) {
+      const errorData = await response.json();
+      
+      // Check if the error message has been properly extracted from the JSON structure
+      if (errorData.details && errorData.details.error) {
+        const errorMessage = errorData.details.error;
+        
+        // Check if the error message includes the expected text about pickup dates
+        // and verify it's not wrapped in a JSON structure
+        if (typeof errorMessage === 'string' && 
+            errorMessage.includes("Pickup date cannot be more than 30 days in the future") && 
+            !errorMessage.includes('{"success":') && 
+            !errorMessage.includes('{"errors":')) {
+          
+          console.log(`  ✅ Received expected error message in clean format: "${errorMessage}"`);
+          return true;
+        } else {
+          console.error(`  ❌ Error message doesn't match expected format. Received: ${errorMessage}`);
+          console.error(`  The error message should contain "Pickup date cannot be more than 30 days in the future" and not be wrapped in JSON`);
+          return false;
+        }
+      } else {
+        console.error(`  ❌ Error response doesn't contain expected 'details.error' property: ${JSON.stringify(errorData)}`);
+        return false;
+      }
+    } else if (response.ok) {
+      const data = await response.json();
+      console.error(`  ❌ Expected error response, but request succeeded: ${JSON.stringify(data)}`);
+      return false;
+    } else {
+      console.error(`  ❌ Unexpected response status: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error(`  Response: ${errorText}`);
+      return false;
+    }
+  } catch (error) {
+    console.error(`Error testing future pickup date error handling: ${error.message}`);
+    return false;
+  }
+}
+
+/**
  * Run a complete test cycle including simple quotes
  * @param {number} testRunNumber - Test run number
  * @returns {Promise<boolean>} Success status
@@ -572,6 +659,18 @@ async function runFullTestCycle(testRunNumber) {
   console.log(`\n🚀 Starting test run ${testRunNumber} with ID: ${testId}`);
   console.log(`===================================================`);
   const cancellationReason = generateRandomCancellationReason();
+  
+  // Test improved error handling for future pickup dates
+  console.log(`\n🧪 Testing Improved Error Handling...`);
+  const errorHandlingSuccess = await testFuturePickupDateError(testId);
+  if (!errorHandlingSuccess) {
+    console.error(`❌ Error handling test failed - the future pickup date error message is not formatted correctly`);
+    return false;
+  }
+  
+  // Add small delay before next test
+  await sleep(1000);
+  
   // Test support data first
   const supportDataSuccess = await testSupportData();
   if (!supportDataSuccess) {
@@ -710,6 +809,7 @@ async function main() {
 
   if (failedTests === 0) {
     console.log(`\n🎉 All tests passed! The Loadsure Insurance Integration is working correctly.`);
+    console.log(`\n✅ Improved error handling for future pickup dates is working correctly.`);
     process.exit(0);
   } else {
     console.log(`\n⚠️  Some tests failed. Please check the logs above for details.`);
