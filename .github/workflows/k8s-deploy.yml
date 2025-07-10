@@ -61,11 +61,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ needs.determine-environment.outputs.environment }}
     
-    outputs:
-      api_image: ${{ steps.set-outputs.outputs.api_image }}
-      worker_image: ${{ steps.set-outputs.outputs.worker_image }}
-      queue_monitor_image: ${{ steps.set-outputs.outputs.queue_monitor_image }}
-    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -108,14 +103,9 @@ jobs:
         cache-from: type=registry,ref=${{ env.CONTAINER_REGISTRY }}/queue-monitor:buildcache
         cache-to: type=registry,ref=${{ env.CONTAINER_REGISTRY }}/queue-monitor:buildcache,mode=max
     
-    - name: Set outputs
-      id: set-outputs
-      run: |
-        echo "api_image=${{ env.CONTAINER_REGISTRY }}/api-service:${{ needs.determine-environment.outputs.image_tag }}" >> $GITHUB_OUTPUT
-        echo "worker_image=${{ env.CONTAINER_REGISTRY }}/loadsure-worker:${{ needs.determine-environment.outputs.image_tag }}" >> $GITHUB_OUTPUT
-        echo "queue_monitor_image=${{ env.CONTAINER_REGISTRY }}/queue-monitor:${{ needs.determine-environment.outputs.image_tag }}" >> $GITHUB_OUTPUT
+    # No outputs needed since we'll use latest tags
 
-  update-kubernetes-manifests:
+  deploy-to-kubernetes:
     needs: [determine-environment, build-and-push-images]
     runs-on: ubuntu-latest
     environment: ${{ needs.determine-environment.outputs.environment }}
@@ -123,46 +113,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
-    - name: Update Kubernetes manifests with new image tags
-      run: |
-        # Update API service manifest
-        sed -i "s|image: ${{ env.CONTAINER_REGISTRY }}/api-service:.*|image: ${{ needs.build-and-push-images.outputs.api_image }}|g" k8s/06-applications/api-service.yaml
-        
-        # Update Worker manifest
-        sed -i "s|image: ${{ env.CONTAINER_REGISTRY }}/loadsure-worker:.*|image: ${{ needs.build-and-push-images.outputs.worker_image }}|g" k8s/06-applications/loadsure-worker.yaml
-        
-        # Update Queue Monitor manifest
-        sed -i "s|image: ${{ env.CONTAINER_REGISTRY }}/queue-monitor:.*|image: ${{ needs.build-and-push-images.outputs.queue_monitor_image }}|g" k8s/06-applications/queue-monitor.yaml
-    
-    - name: Commit and push updated manifests
-      run: |
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "github-actions@github.com"
-        
-        git add k8s/06-applications/api-service.yaml
-        git add k8s/06-applications/loadsure-worker.yaml
-        git add k8s/06-applications/queue-monitor.yaml
-        
-        # Only commit if there are changes
-        if git diff --staged --quiet; then
-          echo "No changes to commit"
-        else
-          git commit -m "Update image tags for ${{ needs.determine-environment.outputs.environment }} deployment [skip ci]"
-          git push
-        fi
-
-  deploy-to-kubernetes:
-    needs: [determine-environment, build-and-push-images, update-kubernetes-manifests]
-    runs-on: ubuntu-latest
-    environment: ${{ needs.determine-environment.outputs.environment }}
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        # Fetch latest changes including the ones from the previous job
-        ref: main
     
     - name: Install doctl
       uses: digitalocean/action-doctl@v2
@@ -320,12 +270,10 @@ jobs:
         echo "📊 Kubernetes Deployment Summary:"
         echo "Environment: $ENV"
         echo "Build and Push: ${{ needs.build-and-push-images.result }}"
-        echo "Update Manifests: ${{ needs.update-kubernetes-manifests.result }}"
         echo "Deploy to Kubernetes: ${{ needs.deploy-to-kubernetes.result }}"
         echo "Verify Deployment: ${{ needs.verify-deployment.result }}"
         
         if [[ "${{ needs.build-and-push-images.result }}" == "success" && \
-              "${{ needs.update-kubernetes-manifests.result }}" == "success" && \
               "${{ needs.deploy-to-kubernetes.result }}" == "success" && \
               "${{ needs.verify-deployment.result }}" == "success" ]]; then
           echo "✅ Kubernetes deployment to $ENV completed successfully!"
