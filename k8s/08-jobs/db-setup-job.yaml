@@ -11,9 +11,9 @@ spec:
       restartPolicy: OnFailure
       containers:
       - name: db-migrations
-        image: loadsure/api-service:latest
+        image: registry.digitalocean.com/svc-container-registry/api-service:latest
         imagePullPolicy: Always
-        command: ["node", "scripts/migrateAll.js"]
+        command: ["sh", "-c", "cd /usr/src/app && echo 'const path = require(\"path\"); module.exports = { \"config\": path.resolve(\"database/config.cjs\"), \"models-path\": path.resolve(\"database/models\"), \"seeders-path\": path.resolve(\"database/seeders\"), \"migrations-path\": path.resolve(\"database/migrations\") };' > /usr/src/app/.sequelizerc && echo 'Debug: DB_USERNAME='$DB_USERNAME', DB_HOST='$DB_HOST', NODE_ENV='$NODE_ENV && npx sequelize-cli db:migrate --debug"]
         env:
         - name: NODE_ENV
           valueFrom:
@@ -43,18 +43,17 @@ spec:
         - name: DB_USERNAME
           valueFrom:
             secretKeyRef:
-              name: svc-loadsure-secrets
+              name: svc-loadsure-secrets  # Ensure this secret exists from secrets-production.yaml
               key: DB_USERNAME
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: svc-loadsure-secrets
+              name: svc-loadsure-secrets  # Ensure this secret exists from secrets-production.yaml
               key: DB_PASSWORD
         - name: DB_SSL
-          valueFrom:
-            configMapKeyRef:
-              name: svc-loadsure-config
-              key: DB_SSL
+          value: "false"  # Disable SSL as server doesn't support it
+        - name: NODE_ENV
+          value: "production"  # Explicitly set to production
         resources:
           requests:
             memory: "128Mi"

@@ -20,11 +20,13 @@ spec:
       labels:
         app: loadsure-worker
     spec:
+      imagePullSecrets:
+      - name: do-registry
       containers:
       - name: loadsure-worker
-        image: loadsure/api-service:latest
+        image: registry.digitalocean.com/svc-container-registry/api-service:latest
         imagePullPolicy: Always
-        command: ["node", "workers/index.js"]
+        command: ["node", "src/services/loadsureService.js"]
         env:
         - name: NODE_ENV
           valueFrom:

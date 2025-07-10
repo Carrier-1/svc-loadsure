@@ -20,12 +20,15 @@ spec:
       labels:
         app: api-service
     spec:
+      imagePullSecrets:
+      - name: do-registry
       containers:
       - name: api-service
-        image: loadsure/api-service:latest
+        image: registry.digitalocean.com/svc-container-registry/api-service:latest
         imagePullPolicy: Always
+        command: ["node", "src/index.js"]
         ports:
-        - containerPort: 3001
+        - containerPort: 3000  # Changed to match Docker setup (3000 internally)
           name: http
         env:
         - name: NODE_ENV
@@ -113,7 +116,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /health
-            port: 3001
+            port: 3000  # Using correct container port
           initialDelaySeconds: 15
           periodSeconds: 5
           timeoutSeconds: 2
@@ -122,7 +125,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 3001
+            port: 3000  # Using correct container port
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 3
@@ -138,7 +141,7 @@ metadata:
 spec:
   ports:
   - port: 3001
-    targetPort: 3001
+    targetPort: 3000  # Updated to match container port
     protocol: TCP
     name: http
   selector:

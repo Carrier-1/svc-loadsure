@@ -82,3 +82,9 @@ frontend/.cache/
 # Terraform files
 terraform/.terraform/providers/registry.terraform.io/digitalocean/digitalocean/2.57.0/darwin_arm64/
 terraform/.terraform.lock.hcl
+
+# Kubernetes secrets
+k8s/04-config/secrets-*.yaml
+!k8s/04-config/secrets.yaml
+*.secrets.yaml
+*-secrets.yaml

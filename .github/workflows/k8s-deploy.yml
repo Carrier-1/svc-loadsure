@@ -1,0 +1,342 @@
+name: Kubernetes Deployment
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  CONTAINER_REGISTRY: registry.digitalocean.com/svc-container-registry
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Reuse existing CI to ensure everything passes before deployment
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  determine-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      image_tag: ${{ steps.env.outputs.image_tag }}
+    steps:
+    - id: env
+      run: |
+        # For workflow_dispatch, use the selected environment
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+        else
+          # Default to staging for automated pushes to main
+          echo "environment=staging" >> $GITHUB_OUTPUT
+        fi
+        
+        # Create a unique image tag based on commit SHA and timestamp
+        SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+        TIMESTAMP=$(date +%Y%m%d%H%M%S)
+        echo "image_tag=${SHORT_SHA}-${TIMESTAMP}" >> $GITHUB_OUTPUT
+
+  validate-deployment:
+    needs: [determine-environment, test]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.determine-environment.outputs.environment }}-approval
+    steps:
+    - name: Validate deployment
+      run: echo "Deployment to ${{ needs.determine-environment.outputs.environment }} validated"
+
+  build-and-push-images:
+    needs: [determine-environment, validate-deployment]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.determine-environment.outputs.environment }}
+    
+    outputs:
+      api_image: ${{ steps.set-outputs.outputs.api_image }}
+      worker_image: ${{ steps.set-outputs.outputs.worker_image }}
+      queue_monitor_image: ${{ steps.set-outputs.outputs.queue_monitor_image }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install doctl
+      uses: digitalocean/action-doctl@v2
+      with:
+        token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+    
+    - name: Login to DigitalOcean Container Registry
+      run: doctl registry login --expiry-seconds 1200
+    
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build and push API image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        push: true
+        tags: ${{ env.CONTAINER_REGISTRY }}/api-service:${{ needs.determine-environment.outputs.image_tag }},${{ env.CONTAINER_REGISTRY }}/api-service:latest
+        cache-from: type=registry,ref=${{ env.CONTAINER_REGISTRY }}/api-service:buildcache
+        cache-to: type=registry,ref=${{ env.CONTAINER_REGISTRY }}/api-service:buildcache,mode=max
+    
+    - name: Build and push Worker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        push: true
+        tags: ${{ env.CONTAINER_REGISTRY }}/loadsure-worker:${{ needs.determine-environment.outputs.image_tag }},${{ env.CONTAINER_REGISTRY }}/loadsure-worker:latest
+        cache-from: type=registry,ref=${{ env.CONTAINER_REGISTRY }}/loadsure-worker:buildcache
+        cache-to: type=registry,ref=${{ env.CONTAINER_REGISTRY }}/loadsure-worker:buildcache,mode=max
+    
+    - name: Build and push Queue Monitor image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        push: true
+        tags: ${{ env.CONTAINER_REGISTRY }}/queue-monitor:${{ needs.determine-environment.outputs.image_tag }},${{ env.CONTAINER_REGISTRY }}/queue-monitor:latest
+        cache-from: type=registry,ref=${{ env.CONTAINER_REGISTRY }}/queue-monitor:buildcache
+        cache-to: type=registry,ref=${{ env.CONTAINER_REGISTRY }}/queue-monitor:buildcache,mode=max
+    
+    - name: Set outputs
+      id: set-outputs
+      run: |
+        echo "api_image=${{ env.CONTAINER_REGISTRY }}/api-service:${{ needs.determine-environment.outputs.image_tag }}" >> $GITHUB_OUTPUT
+        echo "worker_image=${{ env.CONTAINER_REGISTRY }}/loadsure-worker:${{ needs.determine-environment.outputs.image_tag }}" >> $GITHUB_OUTPUT
+        echo "queue_monitor_image=${{ env.CONTAINER_REGISTRY }}/queue-monitor:${{ needs.determine-environment.outputs.image_tag }}" >> $GITHUB_OUTPUT
+
+  update-kubernetes-manifests:
+    needs: [determine-environment, build-and-push-images]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.determine-environment.outputs.environment }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Update Kubernetes manifests with new image tags
+      run: |
+        # Update API service manifest
+        sed -i "s|image: ${{ env.CONTAINER_REGISTRY }}/api-service:.*|image: ${{ needs.build-and-push-images.outputs.api_image }}|g" k8s/06-applications/api-service.yaml
+        
+        # Update Worker manifest
+        sed -i "s|image: ${{ env.CONTAINER_REGISTRY }}/loadsure-worker:.*|image: ${{ needs.build-and-push-images.outputs.worker_image }}|g" k8s/06-applications/loadsure-worker.yaml
+        
+        # Update Queue Monitor manifest
+        sed -i "s|image: ${{ env.CONTAINER_REGISTRY }}/queue-monitor:.*|image: ${{ needs.build-and-push-images.outputs.queue_monitor_image }}|g" k8s/06-applications/queue-monitor.yaml
+    
+    - name: Commit and push updated manifests
+      run: |
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "github-actions@github.com"
+        
+        git add k8s/06-applications/api-service.yaml
+        git add k8s/06-applications/loadsure-worker.yaml
+        git add k8s/06-applications/queue-monitor.yaml
+        
+        # Only commit if there are changes
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "Update image tags for ${{ needs.determine-environment.outputs.environment }} deployment [skip ci]"
+          git push
+        fi
+
+  deploy-to-kubernetes:
+    needs: [determine-environment, build-and-push-images, update-kubernetes-manifests]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.determine-environment.outputs.environment }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        # Fetch latest changes including the ones from the previous job
+        ref: main
+    
+    - name: Install doctl
+      uses: digitalocean/action-doctl@v2
+      with:
+        token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+    
+    - name: Save DigitalOcean kubeconfig
+      run: doctl kubernetes cluster kubeconfig save ${{ secrets.CLUSTER_NAME }}
+    
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.25.0'
+    
+    - name: Create Kubernetes secrets
+      run: |
+        # Create a secrets manifest directly from GitHub secrets
+        cat <<EOF > k8s/04-config/secrets-${{ needs.determine-environment.outputs.environment }}.yaml
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: svc-loadsure-secrets
+          namespace: svc-loadsure
+        type: Opaque
+        stringData:
+          DB_USERNAME: "${{ secrets.DB_USERNAME }}"
+          DB_PASSWORD: "${{ secrets.DB_PASSWORD }}"
+          RABBITMQ_USER: "${{ secrets.RABBITMQ_USER }}"
+          RABBITMQ_PASSWORD: "${{ secrets.RABBITMQ_PASSWORD }}"
+          LOADSURE_API_KEY: "${{ secrets.LOADSURE_API_KEY }}"
+        EOF
+        
+        # Ensure the secrets file is only readable by the current user
+        chmod 600 k8s/04-config/secrets-${{ needs.determine-environment.outputs.environment }}.yaml
+    
+    - name: Deploy Kubernetes resources
+      run: |
+        # Apply Kubernetes manifests in order
+        echo "Applying namespace..."
+        kubectl apply -f k8s/01-namespace.yaml
+        
+        echo "Applying storage class..."
+        kubectl apply -f k8s/02-storage-class.yaml
+        
+        echo "Applying persistent volumes..."
+        kubectl apply -f k8s/03-persistent-volumes/
+        
+        echo "Applying configuration..."
+        kubectl apply -f k8s/04-config/config.yaml
+        kubectl apply -f k8s/04-config/secrets-${{ needs.determine-environment.outputs.environment }}.yaml
+        
+        echo "Applying databases..."
+        kubectl apply -f k8s/05-databases/
+        
+        echo "Applying application components..."
+        kubectl apply -f k8s/06-applications/
+        
+        echo "Applying networking..."
+        kubectl apply -f k8s/07-networking/
+        
+        echo "Applying jobs..."
+        kubectl apply -f k8s/08-jobs/
+      env:
+        DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        DB_USERNAME: ${{ secrets.DB_USERNAME }}
+        RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+        RABBITMQ_USER: ${{ secrets.RABBITMQ_USER }}
+        LOADSURE_API_KEY: ${{ secrets.LOADSURE_API_KEY }}
+
+  verify-deployment:
+    needs: [determine-environment, deploy-to-kubernetes]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.determine-environment.outputs.environment }}
+    
+    steps:
+    - name: Install doctl
+      uses: digitalocean/action-doctl@v2
+      with:
+        token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+    
+    - name: Save DigitalOcean kubeconfig
+      run: doctl kubernetes cluster kubeconfig save ${{ secrets.CLUSTER_NAME }}
+    
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.25.0'
+    
+    - name: Wait for deployments to be ready
+      run: |
+        echo "Waiting for API service deployment..."
+        kubectl -n svc-loadsure rollout status deployment/api-service --timeout=300s
+        
+        echo "Waiting for Worker deployment..."
+        kubectl -n svc-loadsure rollout status deployment/loadsure-worker --timeout=300s
+        
+        echo "Waiting for Queue Monitor deployment..."
+        kubectl -n svc-loadsure rollout status deployment/queue-monitor --timeout=300s
+    
+    - name: Check service health
+      run: |
+        # Get the ingress URL
+        INGRESS_IP=$(kubectl -n svc-loadsure get ingress loadsure-api-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        
+        if [ -z "$INGRESS_IP" ]; then
+          echo "Ingress IP not yet available, using port-forward instead"
+          # Start port forwarding in the background
+          kubectl -n svc-loadsure port-forward svc/api-service 3001:3001 &
+          PF_PID=$!
+          sleep 5
+          
+          # Check health endpoint
+          if curl -s -f http://localhost:3001/health; then
+            echo "Health check passed!"
+          else
+            echo "Health check failed!"
+            kill $PF_PID
+            exit 1
+          fi
+          
+          # Kill port-forward process
+          kill $PF_PID
+        else
+          echo "Ingress IP: $INGRESS_IP"
+          
+          # Check health endpoint
+          if curl -s -f http://$INGRESS_IP/health; then
+            echo "Health check passed!"
+          else
+            echo "Health check failed!"
+            exit 1
+          fi
+        fi
+
+  # Additional approval gate for production deployments
+  production-final-approval:
+    if: needs.determine-environment.outputs.environment == 'production'
+    needs: [determine-environment, verify-deployment]
+    runs-on: ubuntu-latest
+    environment: production-final-approval
+    steps:
+    - name: Final production approval
+      run: echo "Final approval granted for production deployment"
+
+  finalize-deployment:
+    needs: [determine-environment, verify-deployment]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Report deployment status
+      run: |
+        ENV="${{ needs.determine-environment.outputs.environment }}"
+        
+        echo "📊 Kubernetes Deployment Summary:"
+        echo "Environment: $ENV"
+        echo "Build and Push: ${{ needs.build-and-push-images.result }}"
+        echo "Update Manifests: ${{ needs.update-kubernetes-manifests.result }}"
+        echo "Deploy to Kubernetes: ${{ needs.deploy-to-kubernetes.result }}"
+        echo "Verify Deployment: ${{ needs.verify-deployment.result }}"
+        
+        if [[ "${{ needs.build-and-push-images.result }}" == "success" && \
+              "${{ needs.update-kubernetes-manifests.result }}" == "success" && \
+              "${{ needs.deploy-to-kubernetes.result }}" == "success" && \
+              "${{ needs.verify-deployment.result }}" == "success" ]]; then
+          echo "✅ Kubernetes deployment to $ENV completed successfully!"
+          echo "🚀 Application is ready for use!"
+        else
+          echo "❌ Kubernetes deployment to $ENV encountered issues"
+          echo "Please check the logs for more details"
+        fi
+    
+    - name: Cleanup on failure
+      if: failure()
+      run: |
+        echo "🧹 Cleaning up failed deployment artifacts..."
+        # Add any cleanup logic here if needed
