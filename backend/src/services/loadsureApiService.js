@@ -94,6 +94,7 @@ class LoadsureApiService {
     }
     
     try {
+      
       // Extract integration fee details if present
       const integrationFeeType = freightDetails.integrationFeeType || 
                                 (freightDetails.shipment && freightDetails.shipment.integrationFeeType);
@@ -117,7 +118,7 @@ class LoadsureApiService {
       }
       
       // Log the payload for debugging
-      console.log('Sending payload to Loadsure API:', JSON.stringify(payload, null, 2));
+      //console.log('Sending payload to Loadsure API:', JSON.stringify(payload, null, 2));
       
       const response = await fetch(`${this.baseUrl}/api/insureLoad/quote`, {
         method: 'POST',
@@ -130,6 +131,8 @@ class LoadsureApiService {
 
       if (!response.ok) {
         const errorData = await response.json();
+
+        console.log('Loadsure API error response:', JSON.stringify(errorData, null, 2));
         
         // Format the error message as it's currently done
         const errorString = `Loadsure API error: ${response.statusText} - ${JSON.stringify(errorData)}`;

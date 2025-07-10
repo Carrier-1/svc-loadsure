@@ -610,26 +610,47 @@ async function testFuturePickupDateError(testId) {
     if (response.status === 400) {
       const errorData = await response.json();
       
-      // Check if the error message has been properly extracted from the JSON structure
-      if (errorData.details && errorData.details.error) {
-        const errorMessage = errorData.details.error;
+      // Log the full error data for debugging
+      console.log(`\n📣 DEBUG - Full error data received:`, JSON.stringify(errorData, null, 2));
+      
+      // Log the full error data for diagnostic purposes
+      console.log(`\n📣 DEBUG - Full error data received:`, JSON.stringify(errorData, null, 2));
+      
+      // Check for the correct API error response format - now with nested error structure
+      if (errorData.status === 'failed' && errorData.details && errorData.details.error && errorData.msg) {
+        // Get error message from nested structure and from top-level msg
+        const nestedErrorMessage = errorData.details.error.error;
+        const topLevelMessage = errorData.msg;
         
-        // Check if the error message includes the expected text about pickup dates
-        // and verify it's not wrapped in a JSON structure
-        if (typeof errorMessage === 'string' && 
-            errorMessage.includes("Pickup date cannot be more than 30 days in the future") && 
-            !errorMessage.includes('{"success":') && 
-            !errorMessage.includes('{"errors":')) {
+        // Log the received error messages for diagnostic purposes
+        console.log(`\n📣 RECEIVED NESTED ERROR MESSAGE: "${nestedErrorMessage}"`);
+        console.log(`\n📣 RECEIVED TOP-LEVEL MESSAGE: "${topLevelMessage}"`);
+        
+        // Expected error message pattern
+        const expectedPattern = "Pickup date cannot be more than 30 days in the future";
+        
+        // Check if both error messages contain the expected pattern
+        if (typeof nestedErrorMessage === 'string' && 
+            nestedErrorMessage.includes(expectedPattern) &&
+            typeof topLevelMessage === 'string' && 
+            topLevelMessage.includes(expectedPattern) &&
+            !nestedErrorMessage.includes('{"success":') && 
+            !nestedErrorMessage.includes('{"errors":')) {
           
-          console.log(`  ✅ Received expected error message in clean format: "${errorMessage}"`);
+          console.log(`  ✅ Received expected error messages:`);
+          console.log(`     - Nested: "${nestedErrorMessage}"`);
+          console.log(`     - Top-level msg: "${topLevelMessage}"`);
+          console.log(`  ✅ Error response has correct API format with status: "failed", details.error.error and msg properties`);
           return true;
         } else {
-          console.error(`  ❌ Error message doesn't match expected format. Received: ${errorMessage}`);
-          console.error(`  The error message should contain "Pickup date cannot be more than 30 days in the future" and not be wrapped in JSON`);
+          console.error(`  ❌ Error message doesn't contain the expected pattern.`);
+          console.error(`  Received in details.error.error: "${nestedErrorMessage}"`);
+          console.error(`  Received in msg: "${topLevelMessage}"`);
+          console.error(`  Expected to include: "${expectedPattern}"`);
           return false;
         }
       } else {
-        console.error(`  ❌ Error response doesn't contain expected 'details.error' property: ${JSON.stringify(errorData)}`);
+        console.error(`  ❌ Error response doesn't match expected structure with 'status', 'details.error.error', and 'msg' properties: ${JSON.stringify(errorData)}`);
         return false;
       }
     } else if (response.ok) {

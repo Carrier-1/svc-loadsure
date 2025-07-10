@@ -133,7 +133,7 @@ async function setupConsumers() {
     console.log("Received message in quote-received queue");
     if (msg !== null) {
       try {
-        console.log(`Message content: ${msg.content.toString().substring(0, 100)}...`);
+        console.log(`Message content: ${msg.content.toString()}`);
         const data = JSON.parse(msg.content.toString());
         const { requestId } = data;
         

@@ -197,7 +197,9 @@ async function setupConsumers(channel, loadsureApi) {
           if (requestId !== 'unknown' && !isTemporaryError) {
             const errorResponse = {
               requestId: requestId,
-              error: error.message,
+              details: {
+                error: error.message
+              },
               status: 'failed'
             };
             
@@ -297,7 +299,9 @@ async function setupConsumers(channel, loadsureApi) {
           if (requestId !== 'unknown' && !isTemporaryError) {
             const errorResponse = {
               requestId: requestId,
-              error: error.message,
+              details: {
+                error: error.message
+              },
               status: 'failed'
             };
             
@@ -381,8 +385,10 @@ async function setupConsumers(channel, loadsureApi) {
           const errorResponse = {
             requestId: requestId,
             certificateNumber: certificateNumber,
-            error: cancellationResult.error,
-            details: cancellationResult.details,
+            details: {
+              error: cancellationResult.error,
+              ...cancellationResult.details && { additionalInfo: cancellationResult.details }
+            },
             status: 'failed'
           };
           
@@ -430,7 +436,9 @@ async function setupConsumers(channel, loadsureApi) {
           if (requestId !== 'unknown' && !isTemporaryError) {
             const errorResponse = {
               requestId: requestId,
-              error: error.message,
+              details: {
+                error: error.message
+              },
               status: 'failed'
             };
             

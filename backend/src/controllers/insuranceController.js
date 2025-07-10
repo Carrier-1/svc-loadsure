@@ -217,19 +217,50 @@ router.post('/quotes', async (req, res) => {
   };
   
   try {
-    channel.sendToQueue(
-      'quote-requested',
-      Buffer.from(JSON.stringify(message)),
-      { persistent: true }
-    );
-    
-    console.log(`Quote request ${requestId} sent to queue`);
+    // Add retry mechanism for RabbitMQ channel initialization
+    let retries = 0;
+    const maxRetries = 3;
+    const retryDelay = 500; // 500ms
+
+    const sendToQueue = async () => {
+      if (!channel) {
+        if (retries < maxRetries) {
+          console.log(`RabbitMQ channel not ready, retrying (${retries + 1}/${maxRetries})...`);
+          retries++;
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          return sendToQueue();
+        } else {
+          throw new Error('RabbitMQ channel not initialized after retries');
+        }
+      }
+
+      channel.sendToQueue(
+        'quote-requested',
+        Buffer.from(JSON.stringify(message)),
+        { persistent: true }
+      );
+      
+      console.log(`Quote request ${requestId} sent to queue`);
+    };
+
+    await sendToQueue();
   } catch (error) {
     console.error(`Error sending message to queue: ${error.message}`);
     
     // Clean up Redis
     await redis.del(`pending:${requestId}`);
     
+    // Check if this is a validation error (pickup date, etc.)
+    if (error.message && error.message.includes('Pickup date cannot be more than 30 days in the future')) {
+      return res.status(400).json({
+        status: 'failed',
+        details: {
+          error: error.message
+        },
+        requestId
+      });
+    }
+    // Handle other errors
     return res.status(500).json({
       error: 'Error sending request to processing queue',
       requestId
@@ -250,20 +281,26 @@ router.post('/quotes', async (req, res) => {
     if (responseJson) {
       // We found a response
       const response = JSON.parse(responseJson);
+
+      console.log('Response found in Redis:', response);
       
       // Clean up Redis keys
       await redis.del(`pending:${requestId}`);
       await redis.del(`response:${requestId}`);
       
-      // Check if it's an error response
-      if (response.error) {
+      // Check if it's an error response - both direct error property and status:failed format
+      if (response.error || response.data.status === 'failed') {
         return res.status(400).json({
-          error: response.error,
+          status: 'failed',
+          details: {
+            error: response.error || (response.data.details || 'Unknown error')
+          },
+          msg: response.data.details.error || 'Unknown error',
           requestId
         });
       }
       
-      // It's a successful response
+      // It's a successful response if we got here
       const data = response.data;
       
       // Calculate total with integration fee
@@ -606,19 +643,50 @@ router.post('/quotes/simple', async (req, res) => {
   };
   
   try {
-    channel.sendToQueue(
-      'quote-requested',
-      Buffer.from(JSON.stringify(message)),
-      { persistent: true }
-    );
-    
-    console.log(`Simple quote request ${requestId} sent to queue`);
+    // Add retry mechanism for RabbitMQ channel initialization
+    let retries = 0;
+    const maxRetries = 3;
+    const retryDelay = 500; // 500ms
+
+    const sendToQueue = async () => {
+      if (!channel) {
+        if (retries < maxRetries) {
+          console.log(`RabbitMQ channel not ready, retrying (${retries + 1}/${maxRetries})...`);
+          retries++;
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          return sendToQueue();
+        } else {
+          throw new Error('RabbitMQ channel not initialized after retries');
+        }
+      }
+
+      channel.sendToQueue(
+        'quote-requested',
+        Buffer.from(JSON.stringify(message)),
+        { persistent: true }
+      );
+      
+      console.log(`Simple quote request ${requestId} sent to queue`);
+    };
+
+    await sendToQueue();
   } catch (error) {
     console.error(`Error sending message to queue: ${error.message}`);
     
     // Clean up Redis
     await redis.del(`pending:${requestId}`);
     
+    // Check if this is a validation error (pickup date, etc.)
+    if (error.message && error.message.includes('Pickup date cannot be more than 30 days in the future')) {
+      return res.status(400).json({
+        status: 'failed',
+        details: {
+          error: error.message
+        },
+        requestId
+      });
+    }
+    // Handle other errors
     return res.status(500).json({
       error: 'Error sending request to processing queue',
       requestId
@@ -644,15 +712,18 @@ router.post('/quotes/simple', async (req, res) => {
       await redis.del(`pending:${requestId}`);
       await redis.del(`response:${requestId}`);
       
-      // Check if it's an error response
-      if (response.error) {
+      // Check if it's an error response - both direct error property and status:failed format
+      if (response.error || (response.status === 'failed' && response.details)) {
         return res.status(400).json({
-          error: response.error,
+          status: 'failed',
+          details: {
+            error: response.error || (response.details && response.details.error) || 'Unknown error'
+          },
           requestId
         });
       }
       
-      // It's a successful response
+      // It's a successful response if we got here
       const data = response.data;
       
       // Calculate total with integration fee
@@ -875,13 +946,33 @@ router.post('/bookings', async (req, res) => {
   };
   
   try {
-    channel.sendToQueue(
-      'booking-requested',
-      Buffer.from(JSON.stringify(message)),
-      { persistent: true }
-    );
-    
-    console.log(`Booking request ${requestId} sent to queue`);
+    // Add retry mechanism for RabbitMQ channel initialization
+    let retries = 0;
+    const maxRetries = 3;
+    const retryDelay = 500; // 500ms
+
+    const sendToQueue = async () => {
+      if (!channel) {
+        if (retries < maxRetries) {
+          console.log(`RabbitMQ channel not ready, retrying (${retries + 1}/${maxRetries})...`);
+          retries++;
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          return sendToQueue();
+        } else {
+          throw new Error('RabbitMQ channel not initialized after retries');
+        }
+      }
+
+      channel.sendToQueue(
+        'booking-requested',
+        Buffer.from(JSON.stringify(message)),
+        { persistent: true }
+      );
+      
+      console.log(`Booking request ${requestId} sent to queue`);
+    };
+
+    await sendToQueue();
   } catch (error) {
     console.error(`Error sending booking message to queue: ${error.message}`);
     
@@ -1378,7 +1469,24 @@ router.post('/certificates/:number/cancel', async (req, res) => {
       timestamp: new Date().toISOString()
     };
     
-    try {
+  try {
+    // Add retry mechanism for RabbitMQ channel initialization
+    let retries = 0;
+    const maxRetries = 3;
+    const retryDelay = 500; // 500ms
+
+    const sendToQueue = async () => {
+      if (!channel) {
+        if (retries < maxRetries) {
+          console.log(`RabbitMQ channel not ready, retrying (${retries + 1}/${maxRetries})...`);
+          retries++;
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          return sendToQueue();
+        } else {
+          throw new Error('RabbitMQ channel not initialized after retries');
+        }
+      }
+
       channel.sendToQueue(
         'certificate-cancellation-requested',
         Buffer.from(JSON.stringify(message)),
@@ -1386,18 +1494,21 @@ router.post('/certificates/:number/cancel', async (req, res) => {
       );
       
       console.log(`Certificate cancellation request ${requestId} sent to queue`);
-    } catch (queueError) {
-      console.error(`Error sending message to queue: ${queueError.message}`);
-      
-      // Clean up Redis
-      await redis.del(`pending:${requestId}`);
-      
-      return res.status(500).json({
-        status: 'error',
-        error: 'Error sending cancellation request to processing queue',
-        requestId
-      });
-    }
+    };
+
+    await sendToQueue();
+  } catch (queueError) {
+    console.error(`Error sending message to queue: ${queueError.message}`);
+    
+    // Clean up Redis
+    await redis.del(`pending:${requestId}`);
+    
+    return res.status(500).json({
+      status: 'error',
+      error: 'Error sending cancellation request to processing queue',
+      requestId
+    });
+  }
     
     // Set up polling to check for response
     let attempts = 0;
