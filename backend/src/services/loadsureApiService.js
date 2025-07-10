@@ -130,7 +130,31 @@ class LoadsureApiService {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(`Loadsure API error: ${response.statusText} - ${JSON.stringify(errorData)}`);
+        
+        // Format the error message as it's currently done
+        const errorString = `Loadsure API error: ${response.statusText} - ${JSON.stringify(errorData)}`;
+        
+        try {
+          // Try to extract the embedded JSON string
+          const jsonMatch = errorString.match(/Bad Request - (.+)$/);
+          if (jsonMatch && jsonMatch[1]) {
+            const parsedJson = JSON.parse(jsonMatch[1]);
+            if (parsedJson.errors && parsedJson.errors.length > 0 && parsedJson.errors[0].message) {
+              // Return just the specific error message
+              throw new Error(parsedJson.errors[0].message);
+            }
+          }
+        } catch (jsonError) {
+          // If parsing fails, fall back to checking the direct response
+          if (errorData && errorData.errors && errorData.errors.length > 0 && errorData.errors[0].message) {
+            throw new Error(errorData.errors[0].message);
+          } else if (errorData && errorData.message) {
+            throw new Error(errorData.message);
+          }
+        }
+        
+        // If all extraction attempts fail, use the original error string
+        throw new Error(errorString);
       }
 
       const data = await response.json();
@@ -400,7 +424,31 @@ class LoadsureApiService {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(`Loadsure API error: ${response.statusText} - ${JSON.stringify(errorData)}`);
+        
+        // Format the error message as it's currently done
+        const errorString = `Loadsure API error: ${response.statusText} - ${JSON.stringify(errorData)}`;
+        
+        try {
+          // Try to extract the embedded JSON string
+          const jsonMatch = errorString.match(/Bad Request - (.+)$/);
+          if (jsonMatch && jsonMatch[1]) {
+            const parsedJson = JSON.parse(jsonMatch[1]);
+            if (parsedJson.errors && parsedJson.errors.length > 0 && parsedJson.errors[0].message) {
+              // Return just the specific error message
+              throw new Error(parsedJson.errors[0].message);
+            }
+          }
+        } catch (jsonError) {
+          // If parsing fails, fall back to checking the direct response
+          if (errorData && errorData.errors && errorData.errors.length > 0 && errorData.errors[0].message) {
+            throw new Error(errorData.errors[0].message);
+          } else if (errorData && errorData.message) {
+            throw new Error(errorData.message);
+          }
+        }
+        
+        // If all extraction attempts fail, use the original error string
+        throw new Error(errorString);
       }
 
       const data = await response.json();
@@ -707,7 +755,31 @@ class LoadsureApiService {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(`Loadsure API error: ${response.statusText} - ${JSON.stringify(errorData)}`);
+        
+        // Format the error message as it's currently done
+        const errorString = `Loadsure API error: ${response.statusText} - ${JSON.stringify(errorData)}`;
+        
+        try {
+          // Try to extract the embedded JSON string
+          const jsonMatch = errorString.match(/Bad Request - (.+)$/);
+          if (jsonMatch && jsonMatch[1]) {
+            const parsedJson = JSON.parse(jsonMatch[1]);
+            if (parsedJson.errors && parsedJson.errors.length > 0 && parsedJson.errors[0].message) {
+              // Return just the specific error message
+              throw new Error(parsedJson.errors[0].message);
+            }
+          }
+        } catch (jsonError) {
+          // If parsing fails, fall back to checking the direct response
+          if (errorData && errorData.errors && errorData.errors.length > 0 && errorData.errors[0].message) {
+            throw new Error(errorData.errors[0].message);
+          } else if (errorData && errorData.message) {
+            throw new Error(errorData.message);
+          }
+        }
+        
+        // If all extraction attempts fail, use the original error string
+        throw new Error(errorString);
       }
 
       return await response.json();
@@ -757,7 +829,31 @@ class LoadsureApiService {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(`Loadsure API error: ${response.success} - ${JSON.stringify(errorData)}`);
+        
+        // Format the error message as it's currently done
+        const errorString = `Loadsure API error: ${response.statusText} - ${JSON.stringify(errorData)}`;
+        
+        try {
+          // Try to extract the embedded JSON string
+          const jsonMatch = errorString.match(/Bad Request - (.+)$/);
+          if (jsonMatch && jsonMatch[1]) {
+            const parsedJson = JSON.parse(jsonMatch[1]);
+            if (parsedJson.errors && parsedJson.errors.length > 0 && parsedJson.errors[0].message) {
+              // Return just the specific error message
+              throw new Error(parsedJson.errors[0].message);
+            }
+          }
+        } catch (jsonError) {
+          // If parsing fails, fall back to checking the direct response
+          if (errorData && errorData.errors && errorData.errors.length > 0 && errorData.errors[0].message) {
+            throw new Error(errorData.errors[0].message);
+          } else if (errorData && errorData.message) {
+            throw new Error(errorData.message);
+          }
+        }
+        
+        // If all extraction attempts fail, use the original error string
+        throw new Error(errorString);
       }
 
       const data = await response.json();
