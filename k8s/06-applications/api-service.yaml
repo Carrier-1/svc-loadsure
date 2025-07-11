@@ -87,11 +87,9 @@ spec:
             secretKeyRef:
               name: svc-loadsure-secrets
               key: RABBITMQ_PASSWORD
+        # Directly define RABBITMQ_URL instead of using ConfigMap which doesn't support variable substitution
         - name: RABBITMQ_URL
-          valueFrom:
-            configMapKeyRef:
-              name: svc-loadsure-config
-              key: RABBITMQ_URL
+          value: "amqp://loadsure:loadsurepass@rabbitmq:5672"
         - name: LOADSURE_BASE_URL
           valueFrom:
             configMapKeyRef:

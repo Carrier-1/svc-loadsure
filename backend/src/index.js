@@ -83,21 +83,57 @@ async function setupRabbitMQ() {
   try {
     console.log('Connecting to RabbitMQ...');
     
-    // Construct the URL from individual parts to ensure credentials are correct
-    let amqpUrl;
-    if (process.env.RABBITMQ_USER && process.env.RABBITMQ_PASSWORD) {
-      console.log(`Using credentials from environment variables for RabbitMQ connection`);
-      amqpUrl = `amqp://${process.env.RABBITMQ_USER}:${process.env.RABBITMQ_PASSWORD}@rabbitmq:5672`;
-    } else {
-      console.log(`Using RABBITMQ_URL for RabbitMQ connection`);
-      amqpUrl = config.RABBITMQ_URL;
+    // Log environment variables for debugging (without exposing passwords)
+    console.log(`RABBITMQ_USER=${process.env.RABBITMQ_USER || 'not set'}`);
+    console.log(`RABBITMQ_PASSWORD=${process.env.RABBITMQ_PASSWORD ? '******' : 'not set'}`);
+    console.log(`RABBITMQ_URL=${process.env.RABBITMQ_URL ? process.env.RABBITMQ_URL.replace(/:[^:]*@/, ':***@') : 'not set'}`);
+    
+    // Get credentials from secrets in k8s
+    const user = process.env.RABBITMQ_USER || 'guest';
+    const pass = process.env.RABBITMQ_PASSWORD || 'guest';
+    
+    // Construct the URL with explicit credentials
+    const amqpUrl = `amqp://${user}:${pass}@rabbitmq:5672`;
+    console.log(`Connecting to RabbitMQ at: ${amqpUrl.replace(/:[^:]*@/, ':***@')}`); // Hide password in logs
+    
+    // Connect with retry logic
+    let connection;
+    let retries = 0;
+    const maxRetries = 5;
+    
+    while (retries < maxRetries) {
+      try {
+        connection = await amqp.connect(amqpUrl);
+        console.log('RabbitMQ connection established');
+        break;
+      } catch (err) {
+        retries++;
+        console.error(`Failed to connect to RabbitMQ (attempt ${retries}/${maxRetries}): ${err.message}`);
+        if (retries >= maxRetries) throw err;
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
     }
     
-    console.log(`Connecting to RabbitMQ at: ${amqpUrl.replace(/:[^:]*@/, ':***@')}`); // Hide password in logs
-    const connection = await amqp.connect(amqpUrl);
+    // Create a channel with retry logic
+    let channelRetries = 0;
+    const maxChannelRetries = 5;
     
-    // Create a channel
-    channel = await connection.createChannel();
+    while (channelRetries < maxChannelRetries) {
+      try {
+        channel = await connection.createChannel();
+        console.log('RabbitMQ channel created successfully');
+        break;
+      } catch (err) {
+        channelRetries++;
+        console.error(`Failed to create RabbitMQ channel (attempt ${channelRetries}/${maxChannelRetries}): ${err.message}`);
+        if (channelRetries >= maxChannelRetries) throw err;
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
     
     // Ensure queues exist
     console.log("Asserting queues");

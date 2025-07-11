@@ -3,6 +3,7 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import DatabaseService from '../services/databaseService.js';
 import { Op } from 'sequelize';
+import config from '../config.js';
 
 // Import models directly
 let Quote, Booking, Certificate;
@@ -205,7 +206,7 @@ router.post('/quotes', async (req, res) => {
     type: 'quote'
   }), 'EX', 120);
   
-  // Publish event to RabbitMQ
+  // Prepare message for RabbitMQ
   const message = {
     requestId,
     instanceId,
@@ -217,30 +218,43 @@ router.post('/quotes', async (req, res) => {
   };
   
   try {
-    // Add retry mechanism for RabbitMQ channel initialization
+    // Enhanced retry mechanism for RabbitMQ channel
     let retries = 0;
-    const maxRetries = 3;
-    const retryDelay = 500; // 500ms
+    const maxRetries = 10; // Increase max retries
+    const retryDelay = 1000; // 1 second between retries
 
     const sendToQueue = async () => {
       if (!channel) {
         if (retries < maxRetries) {
           console.log(`RabbitMQ channel not ready, retrying (${retries + 1}/${maxRetries})...`);
           retries++;
+          
+          // Wait longer between retries
           await new Promise(resolve => setTimeout(resolve, retryDelay));
+          
+          // Wait longer between retries for the 5th attempt
+          if (retries === 5) {
+            console.log("Extended wait for RabbitMQ connection to stabilize...");
+            await new Promise(resolve => setTimeout(resolve, 3000));
+          }
+          
           return sendToQueue();
         } else {
-          throw new Error('RabbitMQ channel not initialized after retries');
+          throw new Error(`RabbitMQ channel not initialized after ${maxRetries} retries`);
         }
       }
 
-      channel.sendToQueue(
-        'quote-requested',
-        Buffer.from(JSON.stringify(message)),
-        { persistent: true }
-      );
-      
-      console.log(`Quote request ${requestId} sent to queue`);
+      try {
+        channel.sendToQueue(
+          'quote-requested', // Use hardcoded queue name as in original code
+          Buffer.from(JSON.stringify(message)),
+          { persistent: true }
+        );
+        
+        console.log(`Quote request ${requestId} sent to queue`);
+      } catch (queueError) {
+        throw new Error(`Failed to send message to queue: ${queueError.message}`);
+      }
     };
 
     await sendToQueue();
