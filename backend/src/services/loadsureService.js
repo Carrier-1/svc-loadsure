@@ -54,7 +54,13 @@ async function startService() {
     }
     
     console.log('Loadsure Service: Connecting to RabbitMQ...');
-    const connection = await amqp.connect(config.RABBITMQ_URL);
+    // Get RabbitMQ credentials from environment
+    const rabbitmqUser = process.env.RABBITMQ_USER || 'guest';
+    const rabbitmqPassword = process.env.RABBITMQ_PASSWORD || 'guest';
+    const rabbitmqUrl = `amqp://${rabbitmqUser}:${rabbitmqPassword}@rabbitmq:5672`;
+    console.log(`Loadsure Service [${WORKER_ID}]: Connecting to RabbitMQ at ${rabbitmqUrl.replace(/:[^:]*@/, ':***@')}`);
+    
+    const connection = await amqp.connect(rabbitmqUrl);
     const channel = await connection.createChannel();
 
     // Set prefetch based on concurrency - this controls how many messages
