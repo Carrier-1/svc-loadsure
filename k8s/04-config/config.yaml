@@ -11,7 +11,7 @@ data:
   DB_NAME: "loadsure"
   DB_SSL: "false"
   REDIS_URL: "redis://redis:6379"
-  RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+  RABBITMQ_URL: "amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@rabbitmq:5672"
   LOADSURE_BASE_URL: "https://portal.loadsure.net"
   API_PORT: "3001"
   FRONTEND_PORT: "8081"

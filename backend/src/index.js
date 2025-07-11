@@ -82,7 +82,19 @@ let channel;
 async function setupRabbitMQ() {
   try {
     console.log('Connecting to RabbitMQ...');
-    const connection = await amqp.connect(config.RABBITMQ_URL);
+    
+    // Construct the URL from individual parts to ensure credentials are correct
+    let amqpUrl;
+    if (process.env.RABBITMQ_USER && process.env.RABBITMQ_PASSWORD) {
+      console.log(`Using credentials from environment variables for RabbitMQ connection`);
+      amqpUrl = `amqp://${process.env.RABBITMQ_USER}:${process.env.RABBITMQ_PASSWORD}@rabbitmq:5672`;
+    } else {
+      console.log(`Using RABBITMQ_URL for RabbitMQ connection`);
+      amqpUrl = config.RABBITMQ_URL;
+    }
+    
+    console.log(`Connecting to RabbitMQ at: ${amqpUrl.replace(/:[^:]*@/, ':***@')}`); // Hide password in logs
+    const connection = await amqp.connect(amqpUrl);
     
     // Create a channel
     channel = await connection.createChannel();
