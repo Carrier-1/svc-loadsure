@@ -721,18 +721,21 @@ router.post('/quotes/simple', async (req, res) => {
     if (responseJson) {
       // We found a response
       const response = JSON.parse(responseJson);
+
+      console.log('Response found in Redis:', response);
       
       // Clean up Redis keys
       await redis.del(`pending:${requestId}`);
       await redis.del(`response:${requestId}`);
       
       // Check if it's an error response - both direct error property and status:failed format
-      if (response.error || (response.status === 'failed' && response.details)) {
+      if (response.error || response.data.status === 'failed') {
         return res.status(400).json({
           status: 'failed',
           details: {
-            error: response.error || (response.details && response.details.error) || 'Unknown error'
+            error: response.error || (response.data.details || 'Unknown error')
           },
+          msg: response.data.details.error || 'Unknown error',
           requestId
         });
       }
