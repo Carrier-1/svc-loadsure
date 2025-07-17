@@ -81,27 +81,21 @@ jobs:
       with:
         context: ./backend
         push: true
-        tags: ${{ env.CONTAINER_REGISTRY }}/api-service:${{ needs.determine-environment.outputs.image_tag }},${{ env.CONTAINER_REGISTRY }}/api-service:latest
-        cache-from: type=registry,ref=${{ env.CONTAINER_REGISTRY }}/api-service:buildcache
-        cache-to: type=registry,ref=${{ env.CONTAINER_REGISTRY }}/api-service:buildcache,mode=max
+        tags: ${{ env.CONTAINER_REGISTRY }}/api-service:latest
     
     - name: Build and push Worker image
       uses: docker/build-push-action@v5
       with:
         context: ./backend
         push: true
-        tags: ${{ env.CONTAINER_REGISTRY }}/loadsure-worker:${{ needs.determine-environment.outputs.image_tag }},${{ env.CONTAINER_REGISTRY }}/loadsure-worker:latest
-        cache-from: type=registry,ref=${{ env.CONTAINER_REGISTRY }}/loadsure-worker:buildcache
-        cache-to: type=registry,ref=${{ env.CONTAINER_REGISTRY }}/loadsure-worker:buildcache,mode=max
+        tags: ${{ env.CONTAINER_REGISTRY }}/loadsure-worker:latest
     
     - name: Build and push Queue Monitor image
       uses: docker/build-push-action@v5
       with:
         context: ./backend
         push: true
-        tags: ${{ env.CONTAINER_REGISTRY }}/queue-monitor:${{ needs.determine-environment.outputs.image_tag }},${{ env.CONTAINER_REGISTRY }}/queue-monitor:latest
-        cache-from: type=registry,ref=${{ env.CONTAINER_REGISTRY }}/queue-monitor:buildcache
-        cache-to: type=registry,ref=${{ env.CONTAINER_REGISTRY }}/queue-monitor:buildcache,mode=max
+        tags: ${{ env.CONTAINER_REGISTRY }}/queue-monitor:latest
     
     # No outputs needed since we'll use latest tags
 
