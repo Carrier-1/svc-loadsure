@@ -24,7 +24,7 @@ spec:
       - name: do-registry
       containers:
       - name: loadsure-worker
-        image: registry.digitalocean.com/svc-container-registry/api-service:latest
+        image: registry.digitalocean.com/svc-container-registry/loadsure-worker:latest
         imagePullPolicy: Always
         command: ["node", "src/services/loadsureService.js"]
         env:

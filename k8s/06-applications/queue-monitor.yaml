@@ -22,7 +22,7 @@ spec:
       - name: do-registry
       containers:
       - name: queue-monitor
-        image: registry.digitalocean.com/svc-container-registry/api-service:latest
+        image: registry.digitalocean.com/svc-container-registry/queue-monitor:latest
         imagePullPolicy: Always
         command: ["node", "src/services/queueMonitorStarter.js"]
         env:
