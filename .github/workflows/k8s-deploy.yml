@@ -121,6 +121,14 @@ jobs:
       with:
         version: 'v1.25.0'
     
+    - name: Set up Kubernetes to pull from private registry
+      run: |
+        # This creates/updates the image pull secret for the DigitalOcean registry
+        doctl registry kubernetes-manifest | kubectl apply -f -
+        
+        # Verify the secret is created
+        kubectl get secret registry-svc-container-registry -n svc-loadsure || echo "Note: Secret may be created with a different name depending on registry name"
+    
     - name: Create Kubernetes secrets
       run: |
         # Create a secrets manifest directly from GitHub secrets
