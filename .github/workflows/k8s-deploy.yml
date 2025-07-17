@@ -123,11 +123,32 @@ jobs:
     
     - name: Set up Kubernetes to pull from private registry
       run: |
-        # This creates/updates the image pull secret for the DigitalOcean registry
-        doctl registry kubernetes-manifest | kubectl apply -f -
+        # More robust direct approach to create registry auth secret
+        # First login to ensure token is valid
+        doctl registry login
         
-        # Verify the secret is created
-        kubectl get secret registry-svc-container-registry -n svc-loadsure || echo "Note: Secret may be created with a different name depending on registry name"
+        # Create registry secret directly with current token
+        kubectl create secret docker-registry do-registry \
+          --namespace=svc-loadsure \
+          --docker-server=registry.digitalocean.com \
+          --docker-username=${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }} \
+          --docker-password=${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }} \
+          --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Verify the secret was created
+        kubectl get secret do-registry -n svc-loadsure
+        
+        # Ensure deployments use this secret
+        for deployment in api-service loadsure-worker queue-monitor; do
+          echo "Patching $deployment to use do-registry secret..."
+          kubectl patch deployment $deployment -n svc-loadsure --type=json \
+            -p='[{"op":"replace","path":"/spec/template/spec/imagePullSecrets","value":[{"name":"do-registry"}]}]' || true
+        done
+        
+        # Patch service account as well for complete coverage
+        kubectl patch serviceaccount default -n svc-loadsure -p '{"imagePullSecrets": [{"name": "do-registry"}]}'
+        
+        echo "Registry authentication setup complete"
     
     - name: Create Kubernetes secrets
       run: |
