@@ -319,8 +319,10 @@ router.post('/quotes', async (req, res) => {
       
       // Calculate total with integration fee
       let totalCost = parseFloat(data.premium || 0);
-      if (data.integrationFeeAmount) {
-        totalCost += parseFloat(data.integrationFeeAmount);
+      if (data.integrationFeeValue) {
+        totalCost += parseFloat(data.integrationFeeValue);
+        totalCost += parseFloat(data.serviceFee);
+        totalCost += parseFloat(data.tax);
       }
       
       // Send response back to client
@@ -329,15 +331,21 @@ router.post('/quotes', async (req, res) => {
         status: 'success',
         quote: {
           quoteId: data.quoteId,
-          premium: data.premium,
-          currency: data.currency,
-          coverageAmount: data.coverageAmount,
-          terms: data.terms,
+          paymentMethodType: data.paymentMethodType,
           expiresAt: data.expiresAt,
+          name: data.name,
+          description: data.description,
+          coverageAmount: data.coverageAmount,
           deductible: data.deductible || 0,
+          premium: data.premium,
+          serviceFee: data.serviceFee,
+          tax: data.tax,
+          currency: data.currency,
+          termsAndConditionsLink: data.termsAndConditionsLink,
+          statementOfFact: data.statementOfFact,
+          commodityExclusions: data.commodityExclusions,
           integrationFeeType: data.integrationFeeType,
           integrationFeeValue: data.integrationFeeValue,
-          integrationFeeAmount: data.integrationFeeAmount,
           totalCost: totalCost.toFixed(2),
           processingTime: Date.now() - message.timestamp
         }
@@ -745,8 +753,10 @@ router.post('/quotes/simple', async (req, res) => {
       
       // Calculate total with integration fee
       let totalCost = parseFloat(data.premium || 0);
-      if (data.integrationFeeAmount) {
-        totalCost += parseFloat(data.integrationFeeAmount);
+      if (data.integrationFeeValue) {
+        totalCost += parseFloat(data.integrationFeeValue);
+        totalCost += parseFloat(data.serviceFee);
+        totalCost += parseFloat(data.tax);
       }
       
       // Send response back to client
@@ -755,15 +765,21 @@ router.post('/quotes/simple', async (req, res) => {
         status: 'success',
         quote: {
           quoteId: data.quoteId,
-          premium: data.premium,
-          currency: data.currency,
-          coverageAmount: data.coverageAmount,
-          terms: data.terms,
+          paymentMethodType: data.paymentMethodType,
           expiresAt: data.expiresAt,
+          name: data.name,
+          description: data.description,
+          coverageAmount: data.coverageAmount,
           deductible: data.deductible || 0,
+          premium: data.premium,
+          serviceFee: data.serviceFee,
+          tax: data.tax,
+          currency: data.currency,
+          termsAndConditionsLink: data.termsAndConditionsLink,
+          statementOfFact: data.statementOfFact,
+          commodityExclusions: data.commodityExclusions,
           integrationFeeType: data.integrationFeeType,
           integrationFeeValue: data.integrationFeeValue,
-          integrationFeeAmount: data.integrationFeeAmount,
           totalCost: totalCost.toFixed(2)
         }
       });

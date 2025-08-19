@@ -171,13 +171,19 @@ class LoadsureApiService {
       // Format the response to match our internal format
       return {
         quoteId: data.quoteToken,
-        premium: data.insuranceProduct.premium,
-        currency: data.insuranceProduct.currency,
-        coverageAmount: data.insuranceProduct.limit,
-        terms: data.insuranceProduct.description,
+        paymentMethodType: data.paymentMethodType,
         expiresAt: this.calculateExpiryDate(data.expiresIn),
+        name: data.insuranceProduct.name,
+        description: data.insuranceProduct.description,
+        coverageAmount: data.insuranceProduct.limit,
         deductible: data.insuranceProduct.deductible,
-        // Add integration fee details to the response
+        premium: data.insuranceProduct.premium,
+        serviceFee: data.insuranceProduct.serviceFee,
+        tax: data.insuranceProduct.tax,
+        currency: data.insuranceProduct.currency,
+        termsAndConditionsLink: data.insuranceProduct.termsAndConditionsLink,
+        statementOfFact: data.insuranceProduct.statementOfFact,
+        commodityExclusions: data.insuranceProduct.commodityExclusions,
         integrationFeeType: integrationFeeType,
         integrationFeeValue: integrationFeeValue
       };

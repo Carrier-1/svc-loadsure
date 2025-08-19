@@ -193,33 +193,66 @@ const swaggerOptions = {
               type: 'string',
               description: 'Unique quote identifier from Loadsure'
             },
-            premium: {
-              type: 'number',
-              format: 'double',
-              description: 'Insurance premium amount'
-            },
-            currency: {
+            paymentMethodType: {
               type: 'string',
-              description: 'Currency code (e.g., USD, EUR, GBP)'
-            },
-            coverageAmount: {
-              type: 'number',
-              format: 'double',
-              description: 'Total coverage amount'
-            },
-            terms: {
-              type: 'string',
-              description: 'Insurance terms and conditions'
+              description: 'Type of payment method used for the quote'
             },
             expiresAt: {
               type: 'string',
               format: 'date-time',
               description: 'Quote expiration date and time'
             },
+            name: {
+              type: 'string',
+              description: 'Name of the insurance product'
+            },
+            description: {
+              type: 'string',
+              description: 'Description of the insurance product'
+            },
+            coverageAmount: {
+              type: 'number',
+              format: 'double',
+              description: 'Total coverage amount'
+            },
             deductible: {
               type: 'number',
               format: 'double',
               description: 'Insurance deductible amount'
+            },
+            premium: {
+              type: 'number',
+              format: 'double',
+              description: 'Insurance premium amount'
+            },
+            serviceFee: {
+              type: 'number',
+              format: 'double',
+              description: 'Insurance service fee amount'
+            },
+            tax: {
+              type: 'number',
+              format: 'double',
+              description: 'Insurance tax amount'
+            },
+            currency: {
+              type: 'string',
+              description: 'Currency code (e.g., USD, EUR, GBP)'
+            },
+            termsAndConditionsLink: {
+              type: 'string',
+              description: 'Link to Terms & Conditions pdf'
+            },
+            statementOfFact: {
+              type: 'string',
+              description: 'Insurance Statement of Fact'
+            },
+            commodityExclusions: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'List of excluded commodity IDs'
             },
             integrationFeeType: {
               type: 'string',
@@ -231,24 +264,14 @@ const swaggerOptions = {
               format: 'double',
               description: 'Value of integration fee (percentage or fixed amount)'
             },
-            integrationFeeAmount: {
-              type: 'number',
-              format: 'double',
-              description: 'Calculated integration fee amount'
-            },
             totalCost: {
               type: 'string',
               description: 'Total cost including premium and integration fee'
             },
-            status: {
-              type: 'string',
-              enum: ['active', 'expired', 'booked', 'cancelled'],
-              description: 'Current status of the quote'
-            },
-            createdAt: {
+            processingTime: {
               type: 'string',
               format: 'date-time',
-              description: 'Date and time when the quote was created'
+              description: 'Date and time when the quote was processed'
             }
           }
         },
