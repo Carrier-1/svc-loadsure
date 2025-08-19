@@ -98,7 +98,7 @@ describe('LoadsureApiService', () => {
         premium: 100,
         currency: 'USD',
         coverageAmount: 10000,
-        terms: 'Test coverage',
+        description: 'Test coverage', // API now returns 'description' instead of 'terms'
         deductible: 500,
         integrationFeeType: 'percentage',
         integrationFeeValue: 0.1
