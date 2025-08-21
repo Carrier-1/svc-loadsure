@@ -204,6 +204,16 @@ jobs:
         RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
         RABBITMQ_USER: ${{ secrets.RABBITMQ_USER }}
         LOADSURE_API_KEY: ${{ secrets.LOADSURE_API_KEY }}
+        
+    - name: Force restart of deployments
+      run: |
+        echo "Forcing rollout restart of all deployments to ensure latest images are used..."
+        kubectl rollout restart deployment/api-service deployment/loadsure-worker deployment/queue-monitor -n svc-loadsure
+        
+        echo "Waiting for deployments to complete rollout..."
+        kubectl rollout status deployment/api-service -n svc-loadsure --timeout=180s
+        kubectl rollout status deployment/loadsure-worker -n svc-loadsure --timeout=180s
+        kubectl rollout status deployment/queue-monitor -n svc-loadsure --timeout=180s
 
   verify-deployment:
     needs: [determine-environment, deploy-to-kubernetes]
