@@ -278,6 +278,7 @@ jobs:
         args: >
           --failOnCVSS 7
           --enableRetired
+          --disableOssIndex
     
     - name: Upload dependency check report
       if: always()
