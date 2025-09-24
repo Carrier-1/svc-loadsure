@@ -2,9 +2,22 @@
 import QueueMonitorService from './queueMonitorService.js';
 import config from '../config.js';
 
+// Log environment variables for debugging (without exposing passwords)
+console.log(`RABBITMQ_USER=${process.env.RABBITMQ_USER || 'not set'}`);
+console.log(`RABBITMQ_PASSWORD=${process.env.RABBITMQ_PASSWORD ? '******' : 'not set'}`);
+console.log(`RABBITMQ_URL=${process.env.RABBITMQ_URL ? process.env.RABBITMQ_URL.replace(/:[^:]*@/, ':***@') : 'not set'}`);
+
+// Get credentials from secrets in k8s
+const user = process.env.RABBITMQ_USER || 'guest';
+const pass = process.env.RABBITMQ_PASSWORD || 'guest';
+
+// Construct the URL with explicit credentials
+const amqpUrl = `amqp://${user}:${pass}@rabbitmq:5672`;
+console.log(`Connecting to RabbitMQ at: ${amqpUrl.replace(/:[^:]*@/, ':***@')}`); // Hide password in logs
+
 // Read configuration from environment variables
 const monitorOptions = {
-  rabbitMqUrl: process.env.RABBITMQ_URL || config.RABBITMQ_URL,
+  rabbitMqUrl: amqpUrl,
   queues: [
     config.QUEUE_QUOTE_REQUESTED, 
     config.QUEUE_BOOKING_REQUESTED
