@@ -76,7 +76,6 @@ spec:
             configMapKeyRef:
               name: svc-loadsure-config
               key: REDIS_URL
-        # Get RabbitMQ credentials from secrets first
         - name: RABBITMQ_USER
           valueFrom:
             secretKeyRef:
@@ -87,7 +86,6 @@ spec:
             secretKeyRef:
               name: svc-loadsure-secrets
               key: RABBITMQ_PASSWORD
-        # Directly define RABBITMQ_URL instead of using ConfigMap which doesn't support variable substitution
         - name: RABBITMQ_URL
           value: "amqp://loadsure:loadsurepass@rabbitmq:5672"
         - name: LOADSURE_BASE_URL
