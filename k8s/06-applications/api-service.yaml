@@ -128,7 +128,7 @@ spec:
             port: 3000  # Using correct container port
           initialDelaySeconds: 15
           periodSeconds: 5
-          timeoutSeconds: 2
+          timeoutSeconds: 5
           successThreshold: 1
           failureThreshold: 3
         livenessProbe:

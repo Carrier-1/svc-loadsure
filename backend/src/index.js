@@ -421,15 +421,28 @@ async function startServer() {
 
     // Add a health check endpoint (not rate limited)
     app.get('/health', async (req, res) => {
-      // Check Redis connection
+      // Implement timeout for async operations to meet Kubernetes probe timeout
+      const HEALTH_TIMEOUT_MS = 1000; // 1000ms timeout for each operation
+      
+      // Helper function to add timeout to any promise
+      const withTimeout = (promise, ms, fallback) => {
+        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(fallback), ms));
+        return Promise.race([promise, timeoutPromise]);
+      };
+      
+      // Check Redis connection with timeout
       let redisStatus = 'disconnected';
       let redisDetails = {};
       try {
-        const pingResult = await redis.ping();
-        redisStatus = pingResult === 'PONG' ? 'connected' : 'error';
+        // Add timeout to ping operation
+        const pingPromise = redis.ping();
+        const pingResult = await withTimeout(pingPromise, HEALTH_TIMEOUT_MS, 'timeout');
+        redisStatus = pingResult === 'PONG' ? 'connected' : 'degraded';
         
-        // Get pending requests count
-        const pendingKeys = await redis.keys('pending:*');
+        // Add timeout to keys operation
+        const keysPromise = redis.keys('pending:*');
+        const pendingKeys = await withTimeout(keysPromise, HEALTH_TIMEOUT_MS, []);
+        
         redisDetails = {
           pendingRequests: pendingKeys.length,
           pendingRequestIds: pendingKeys.map(k => k.replace('pending:', '')).slice(0, 10) // Show max 10 keys
@@ -439,22 +452,30 @@ async function startServer() {
         redisDetails = { error: redisError.message };
       }
       
-      // Check RabbitMQ status
+      // Check RabbitMQ status with timeout
       const rabbitmqStatus = channel ? 'connected' : 'disconnected';
       let rabbitmqDetails = {};
       if (channel) {
         try {
-          // Check if queues exist (this will throw if connection is down)
-          await channel.checkQueue(config.QUEUE_QUOTE_REQUESTED);
+          // Add timeout to checkQueue operation
+          const checkQueuePromise = channel.checkQueue(config.QUEUE_QUOTE_REQUESTED);
+          await withTimeout(checkQueuePromise, HEALTH_TIMEOUT_MS, null);
           rabbitmqDetails.healthCheck = 'passed';
         } catch (rmqError) {
           rabbitmqDetails.healthCheck = 'failed';
-          rabbitmqDetails.error = rmqError.message;
+          rabbitmqDetails.error = rmqError ? rmqError.message : 'Timeout checking queue';
         }
       }
       
+      // Determine overall status
+      const overallStatus = (() => {
+        if (redisStatus === 'connected' && rabbitmqStatus === 'connected') return 'ok';
+        if (redisStatus === 'error' || rabbitmqStatus === 'disconnected') return 'degraded';
+        return 'warning';
+      })();
+      
       res.json({ 
-        status: redisStatus === 'connected' && rabbitmqStatus === 'connected' ? 'ok' : 'degraded', 
+        status: overallStatus, 
         timestamp: new Date().toISOString(),
         instanceId: process.env.HOSTNAME || 'unknown',
         version: process.env.npm_package_version || 'dev',
